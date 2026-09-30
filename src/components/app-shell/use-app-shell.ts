@@ -49,10 +49,13 @@ export function useAppShell() {
     };
   }, [bootstrap]);
 
-  // 未登录时守卫用：把当前页记进 next，登录完回来。
-  const loginRedirect = buildLoginRedirect(
-    `${location.pathname}${location.search}`,
-  );
+  // 未登录时守卫用：把当前页记进 next，登录完回来。主动退出不带 next —— 下一位登录者不该落到上一位
+  // 最后停留的页面。退出时 clearSession 让守卫先于 navigate 生效（登录页是懒加载路由，navigate 要等它），
+  // 所以由这个标记决定守卫跳哪儿，而不是再补一次 navigate。
+  const [loggingOut, setLoggingOut] = useState(false);
+  const loginRedirect = loggingOut
+    ? LOGIN_PATH
+    : buildLoginRedirect(`${location.pathname}${location.search}`);
 
   // 401（请求层已 clearSession）：客户端路由跳登录页，next 取跳转那一刻的页面而不是闭包里的。
   useEffect(() => {
@@ -93,12 +96,13 @@ export function useAppShell() {
       })
       .finally(() => {
         disconnectRealtime();
+        // 与 clearSession 触发的重渲染同批：守卫渲染时已经是「主动退出」，跳不带 next 的登录页。
+        setLoggingOut(true);
         clearSession();
         // 缓存里是按角色可见的数据，不能留给下一位登录者。
         queryClient.clear();
-        void navigate(LOGIN_PATH, { replace: true });
       });
-  }, [navigate, queryClient]);
+  }, [queryClient]);
 
   return {
     session,

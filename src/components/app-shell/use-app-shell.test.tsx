@@ -3,7 +3,7 @@
 // 请求层的 refreshAccessToken、react-router 的 useNavigate / useLocation、实时连接都 mock，不发真实请求。
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,7 @@ import { clearSession, setAccessToken } from "@/lib/auth";
 
 const navigate = vi.hoisted(() => vi.fn());
 const refreshAccessToken = vi.hoisted(() => vi.fn());
+const logout = vi.hoisted(() => vi.fn());
 
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),
@@ -28,6 +29,11 @@ vi.mock("react-router", async (importOriginal) => ({
 vi.mock("@/lib/request", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/request")>()),
   refreshAccessToken,
+}));
+
+vi.mock("@/services/auth-service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/auth-service")>()),
+  logout,
 }));
 
 // 实时连接是应用级单例：只替换建连 / 断连，其它导出（状态订阅）保留。
@@ -124,5 +130,42 @@ describe("useAppShell bootstrap (no session at mount)", () => {
     expect(result.current.checking).toBe(false);
     expect(result.current.session).toMatchObject({ username: "admin" });
     expect(refreshAccessToken).not.toHaveBeenCalled();
+  });
+});
+
+describe("useAppShell logout", () => {
+  it("clears the session and sends the guard to /login without next", async () => {
+    logout.mockResolvedValueOnce(undefined);
+    setAccessToken(ADMIN_TOKEN);
+
+    const { result } = renderHook(() => useAppShell(), { wrapper });
+
+    await act(async () => {
+      result.current.onLogout();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.session).toBeNull();
+    });
+    // 主动退出：下一位登录者不该被带回上一位停留的 /groups/g1。
+    expect(result.current.loginRedirect).toBe("/login");
+  });
+
+  it("still clears locally when the logout request fails", async () => {
+    logout.mockRejectedValueOnce(new Error("offline"));
+    setAccessToken(ADMIN_TOKEN);
+
+    const { result } = renderHook(() => useAppShell(), { wrapper });
+
+    await act(async () => {
+      result.current.onLogout();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.session).toBeNull();
+    });
+    expect(result.current.loginRedirect).toBe("/login");
   });
 });
