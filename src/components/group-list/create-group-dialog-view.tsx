@@ -35,7 +35,7 @@ const FORM_ID = "create-group-form";
 
 function accountLabel(account: CreateGroupAccountOption): string {
   return account.platformUserId
-    ? `${account.platformUserId}（${account.id}）`
+    ? `${account.id}（${account.platformUserId}）`
     : account.id;
 }
 

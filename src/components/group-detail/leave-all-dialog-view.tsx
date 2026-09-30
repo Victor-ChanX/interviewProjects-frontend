@@ -23,7 +23,7 @@ import type { LeaveAllDialogViewProps } from "./types";
 export function LeaveAllDialogView({
   open,
   onOpenChange,
-  groupId,
+  groupLabel,
   submitting,
   submitError,
   onConfirm,
@@ -35,7 +35,8 @@ export function LeaveAllDialogView({
         <DialogHeader>
           <DialogTitle>全部退群</DialogTitle>
           <DialogDescription>
-            群 <span className="font-mono">{groupId}</span> 里的所有服务账号退群
+            群 <span className="font-mono">{groupLabel}</span>{" "}
+            里的所有服务账号退群
           </DialogDescription>
         </DialogHeader>
 

@@ -61,7 +61,8 @@ export interface AgentRunListViewProps {
 export interface LeaveAllDialogViewProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  groupId: string;
+  /** 确认文案里的群名：网关群 ID（与页面标题一致），还没拿到时退回本地 ID。 */
+  groupLabel: string;
   submitting: boolean;
   /** 提交被拒的整句提示（409 GROUP_ALREADY_LEFT / GROUP_NOT_READY / JOB_ALREADY_RUNNING 的 message）；null 不显示。 */
   submitError: string | null;

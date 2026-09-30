@@ -110,7 +110,7 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
         ? {
             open: leave.open,
             onOpenChange: leave.setOpen,
-            groupId,
+            groupLabel: detail.group?.gatewayGroupId ?? groupId,
             submitting: leave.submitting,
             submitError: leave.submitError,
             onConfirm: () => void leave.confirm(),
@@ -124,7 +124,7 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
                   },
           }
         : null,
-    [canWrite, groupId, leave],
+    [canWrite, detail.group?.gatewayGroupId, groupId, leave],
   );
 
   return (
