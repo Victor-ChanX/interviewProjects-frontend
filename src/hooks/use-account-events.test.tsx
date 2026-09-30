@@ -115,6 +115,47 @@ describe("useAccountEvents", () => {
     ).toEqual({ ...ACCOUNTS[0], status: "suspended", rateLimitedUntil: null });
   });
 
+  it("is idempotent: replaying the same events twice leaves the same rows, no duplicates (#7 断线补发)", () => {
+    const { queryClient, invalidate } = setup(ACCOUNTS);
+    const statusChanged: RealtimeEvent = {
+      seq: 5,
+      type: "account_status_changed",
+      payload: { accountId: "a-1", from: "rate_limited", to: "online" },
+    };
+    const terminal: RealtimeEvent = {
+      seq: 6,
+      type: "account_terminal",
+      payload: { accountId: "a-2", status: "session_expired" },
+    };
+
+    act(() => {
+      push(statusChanged);
+      push(terminal);
+    });
+
+    const afterFirst = queryClient.getQueryData<AccountRead[]>(
+      queryKeys.accounts.list(),
+    );
+
+    act(() => {
+      push(statusChanged);
+      push(terminal);
+    });
+
+    const afterReplay = queryClient.getQueryData<AccountRead[]>(
+      queryKeys.accounts.list(),
+    );
+
+    expect(afterReplay).toEqual(afterFirst);
+    expect(afterReplay).toEqual([
+      { ...ACCOUNTS[0], status: "online", rateLimitedUntil: null },
+      { ...ACCOUNTS[1], status: "session_expired" },
+    ]);
+    expect(afterReplay).toHaveLength(2);
+    // 重放只是再 invalidate 一次（权威值由 REST 覆盖），不会造新行。
+    expect(invalidate).toHaveBeenCalledTimes(4);
+  });
+
   it("ignores other event types and does not create a list that was never fetched", () => {
     const { queryClient, invalidate } = setup(undefined);
 

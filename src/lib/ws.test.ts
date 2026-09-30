@@ -67,6 +67,7 @@ class FakeSocket implements SocketLike {
 
 const sockets: FakeSocket[] = [];
 const HEARTBEAT_MS = 1_000;
+const SYNC_SETTLE_MS = 200;
 
 function lastSocket(): FakeSocket {
   const socket = sockets[sockets.length - 1];
@@ -107,6 +108,7 @@ beforeEach(() => {
     heartbeatMs: HEARTBEAT_MS,
     backoffBaseMs: 100,
     backoffMaxMs: 1_000,
+    syncSettleMs: SYNC_SETTLE_MS,
     random: () => 0,
   });
 });
@@ -223,6 +225,30 @@ describe("resync", () => {
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith();
   });
+
+  it("moves the watermark to fromSeq so the next reconnect does not ask for the same gap again", () => {
+    window.sessionStorage.setItem(LAST_SEQ_STORAGE_KEY, "3");
+    connectAndAuth();
+    lastSocket().push({ type: "resync", sinceSeq: 3, fromSeq: 1003 });
+
+    expect(getLastSeq()).toBe(1003);
+    expect(window.sessionStorage.getItem(LAST_SEQ_STORAGE_KEY)).toBe("1003");
+
+    // 服务端从 fromSeq 之后起推：这些帧是新的，照常派发。
+    const seen: number[] = [];
+
+    subscribeRealtime((event) => seen.push(event.seq));
+    lastSocket().push({ seq: 1004, type: "message", payload: {} });
+    expect(seen).toEqual([1004]);
+
+    lastSocket().drop();
+    vi.advanceTimersByTime(100);
+    lastSocket().open();
+    expect(lastSocket().frames()).toEqual([
+      { type: "auth", accessToken: "tok", sinceSeq: 1004 },
+    ]);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("reconnect", () => {
@@ -232,7 +258,8 @@ describe("reconnect", () => {
     first.push({ seq: 7, type: "message", payload: {} });
     first.drop();
 
-    expect(getConnectionStatus()).toBe("closed");
+    // 非手动断线：已排重连，徽标显示「重连中」而不是「离线」。
+    expect(getConnectionStatus()).toBe("reconnecting");
     expect(sockets).toHaveLength(1);
 
     // 第一次退避 = base * 2^0 = 100ms（random 固定 0，无抖动）。
@@ -243,11 +270,153 @@ describe("reconnect", () => {
 
     const second = lastSocket();
 
+    // 重试中的 socket 仍是 reconnecting，不回退成 connecting。
+    expect(getConnectionStatus()).toBe("reconnecting");
     second.open();
 
     expect(second.frames()).toEqual([
       { type: "auth", accessToken: "tok", sinceSeq: 7 },
     ]);
+  });
+
+  it("keeps the first backoff within a second with the production defaults", () => {
+    // 题目 B4：重连后 3 秒内出现 —— 首次退避 500ms + 20% 抖动上限 = 600ms。
+    configureRealtime({
+      backoffBaseMs: 500,
+      backoffMaxMs: 30_000,
+      random: () => 1,
+    });
+    connectAndAuth();
+    lastSocket().drop();
+
+    vi.advanceTimersByTime(600);
+    expect(sockets).toHaveLength(2);
+  });
+
+  it("drops replayed frames (seq <= lastSeq) after reconnect and dispatches new ones in order", () => {
+    const first = connectAndAuth();
+    const seen: number[] = [];
+
+    subscribeRealtime((event) => seen.push(event.seq));
+    first.push({ seq: 7, type: "message", payload: {} });
+    first.push({ seq: 8, type: "message", payload: {} });
+    first.drop();
+    vi.advanceTimersByTime(100);
+
+    const second = lastSocket();
+
+    second.open();
+    second.push({ type: "auth", success: true });
+    // 服务端从 sinceSeq=8 之后补发；lastSentSeq 水位共用，但服务端重试 / 竞争也可能把已推过的重来一遍。
+    second.push({ seq: 8, type: "message", payload: {} });
+    second.push({ seq: 9, type: "message", payload: {} });
+    second.push({ seq: 10, type: "agent_run", payload: {} });
+    second.push({ seq: 9, type: "message", payload: {} });
+    // 补发完继续实时：顺序不变。
+    second.push({ seq: 11, type: "message", payload: {} });
+
+    expect(seen).toEqual([7, 8, 9, 10, 11]);
+    expect(getLastSeq()).toBe(11);
+  });
+
+  it("advances lastSeq only after every handler succeeded", () => {
+    const socket = connectAndAuth();
+    let failOnce = true;
+
+    subscribeRealtime((event) => {
+      if (event.seq === 2 && failOnce) {
+        failOnce = false;
+        throw new Error("boom");
+      }
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    socket.push({ seq: 1, type: "message", payload: {} });
+    socket.push({ seq: 2, type: "message", payload: {} });
+
+    // seq 2 的 handler 抛错：水位停在 1，断线后服务端会把 2 再补发一次（handler 幂等）。
+    expect(getLastSeq()).toBe(1);
+    expect(window.sessionStorage.getItem(LAST_SEQ_STORAGE_KEY)).toBe("1");
+
+    socket.drop();
+    vi.advanceTimersByTime(100);
+    lastSocket().open();
+
+    expect(lastSocket().frames()).toEqual([
+      { type: "auth", accessToken: "tok", sinceSeq: 1 },
+    ]);
+  });
+
+  it("shows syncing while the server replays and settles to open once frames go quiet", () => {
+    const first = connectAndAuth();
+
+    first.push({ seq: 3, type: "message", payload: {} });
+    first.drop();
+    vi.advanceTimersByTime(100);
+
+    const second = lastSocket();
+
+    second.open();
+    second.push({ type: "auth", success: true });
+    expect(getConnectionStatus()).toBe("syncing");
+
+    vi.advanceTimersByTime(SYNC_SETTLE_MS - 1);
+    second.push({ seq: 4, type: "message", payload: {} });
+    // 每来一帧安静期重新计时。
+    vi.advanceTimersByTime(SYNC_SETTLE_MS - 1);
+    expect(getConnectionStatus()).toBe("syncing");
+    vi.advanceTimersByTime(1);
+    expect(getConnectionStatus()).toBe("open");
+  });
+
+  it("goes straight to open when there is nothing to resume", () => {
+    connectAndAuth();
+    expect(getConnectionStatus()).toBe("open");
+    // 首次连上不是「补不回来」：不全量重拉。
+    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a full invalidate when reconnecting without a resume point after having been open", () => {
+    // 真机复现（2026-09-30）：页面连上后一条事件都没收到就断线，重连带不了 sinceSeq，
+    // 服务端从「现在」起推，断线期间的事件谁也补不回来 → 按 resync 处理。
+    connectAndAuth();
+    lastSocket().drop();
+    vi.advanceTimersByTime(100);
+    lastSocket().open();
+
+    expect(lastSocket().frames()).toEqual([
+      { type: "auth", accessToken: "tok" },
+    ]);
+
+    lastSocket().push({ type: "auth", success: true });
+
+    expect(getConnectionStatus()).toBe("open");
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith();
+  });
+
+  it("adopts the seq carried by the auth frame as the resume point", () => {
+    connectRealtime();
+    lastSocket().open();
+    // 服务端在 auth 成功帧里报当前 seq（前向兼容）：不是事件帧，不派发；作为补发点采用。
+    const seen: number[] = [];
+
+    subscribeRealtime((event) => seen.push(event.seq));
+    lastSocket().push({ type: "auth", success: true, seq: 35 });
+
+    expect(seen).toEqual([]);
+    expect(getLastSeq()).toBe(35);
+    expect(getConnectionStatus()).toBe("open");
+
+    lastSocket().drop();
+    vi.advanceTimersByTime(100);
+    lastSocket().open();
+    expect(lastSocket().frames()).toEqual([
+      { type: "auth", accessToken: "tok", sinceSeq: 35 },
+    ]);
+    // 有补发点就不需要全量重拉。
+    lastSocket().push({ type: "auth", success: true, seq: 35 });
+    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
   });
 
   it("grows the delay exponentially up to the cap and resets after auth", () => {
@@ -307,6 +476,28 @@ describe("reconnect", () => {
     expect(sockets).toHaveLength(2);
   });
 
+  it("reconnects immediately on the online event and does not double up with the backoff timer", () => {
+    connectAndAuth();
+    lastSocket().push({ seq: 5, type: "message", payload: {} });
+    lastSocket().drop();
+    vi.advanceTimersByTime(10);
+    expect(sockets).toHaveLength(1);
+
+    window.dispatchEvent(new Event("online"));
+
+    expect(sockets).toHaveLength(2);
+    expect(getConnectionStatus()).toBe("reconnecting");
+    lastSocket().open();
+    expect(lastSocket().frames()).toEqual([
+      { type: "auth", accessToken: "tok", sinceSeq: 5 },
+    ]);
+
+    // 退避定时器已取消，且连接活着时再来 online 也不会另开一条。
+    vi.advanceTimersByTime(2_000);
+    window.dispatchEvent(new Event("online"));
+    expect(sockets).toHaveLength(2);
+  });
+
   it("reconnects immediately when the tab comes back to the foreground", () => {
     connectAndAuth();
     lastSocket().drop();
@@ -342,7 +533,7 @@ describe("heartbeat", () => {
     expect(socket.closed).toEqual([
       { code: 4000, reason: "heartbeat timeout" },
     ]);
-    expect(getConnectionStatus()).toBe("closed");
+    expect(getConnectionStatus()).toBe("reconnecting");
     vi.advanceTimersByTime(100);
     expect(sockets).toHaveLength(2);
   });

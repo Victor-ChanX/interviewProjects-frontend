@@ -14,8 +14,11 @@ const NAV_ITEMS = [
   { to: "/groups", label: "群组" },
 ] as const;
 
+// 断线期间显示「重连中」（退避 / 重试中），带 sinceSeq 重连成功、服务端补发中显示「同步中」（#7）。
 const CONNECTION_LABELS = {
   connecting: "连接中",
+  reconnecting: "重连中",
+  syncing: "同步中",
   open: "实时",
   closed: "离线",
 } as const;

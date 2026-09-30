@@ -179,6 +179,59 @@ describe("useMessageTimeline", () => {
     expect(keys(result.current.messages)).toEqual(["c1", "m2"]);
   });
 
+  it("is idempotent: the same message event replayed twice yields one row and no extra rows (#7 断线补发)", async () => {
+    const m4 = msg({ msgId: "m4", sentAt: "2026-09-30T10:04:00.000Z" });
+    const headWithM4: MessagePage = {
+      items: [m4, own, m2],
+      nextCursor: "cur1",
+    };
+
+    listMessages
+      .mockResolvedValueOnce(FIRST_PAGE)
+      // 重连补发：同一条事件到达两次 → 单飞 + 一次补拉，两次都拿到同一份最新页。
+      .mockResolvedValueOnce(headWithM4)
+      .mockResolvedValueOnce(headWithM4);
+
+    const { result } = setup();
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const replayed = { groupId: "g1", msgId: "m4", isOwn: false };
+
+    push("message", replayed);
+    push("message", replayed);
+
+    await waitFor(() =>
+      expect(keys(result.current.messages)).toEqual(["m4", "c1", "m2"]),
+    );
+    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(3));
+    // 补拉完成后仍是同一份：没有第二行 m4。
+    expect(keys(result.current.messages)).toEqual(["m4", "c1", "m2"]);
+
+    // 自己消息的投递事件重放两次：就地覆盖，结果一致，不再发请求。
+    const delivered = {
+      groupId: "g1",
+      msgId: "m3",
+      isOwn: true,
+      clientMsgId: "c1",
+      deliveryStatus: "sent",
+      failCode: null,
+    };
+
+    push("message", delivered);
+    push("message", delivered);
+
+    await waitFor(() =>
+      expect(result.current.messages[1]).toEqual({
+        ...own,
+        msgId: "m3",
+        deliveryStatus: "sent",
+      }),
+    );
+    expect(keys(result.current.messages)).toEqual(["m4", "c1", "m2"]);
+    expect(listMessages).toHaveBeenCalledTimes(3);
+  });
+
   it("coalesces a burst of events into one in-flight refetch plus one catch-up", async () => {
     const m4 = msg({ msgId: "m4", sentAt: "2026-09-30T10:04:00.000Z" });
     const m5 = msg({ msgId: "m5", sentAt: "2026-09-30T10:05:00.000Z" });

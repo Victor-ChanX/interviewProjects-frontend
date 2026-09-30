@@ -6,12 +6,27 @@
 // - 事件帧 `{ seq, type, payload }`，seq 全局单调；按 seq 去重（<= lastSeq 的丢弃），
 //   lastSeq 存模块内存 + sessionStorage，重连 / 刷新时作为 sinceSeq 带上让服务端补发。
 //   不带 sinceSeq（lastSeq 为 0）时服务端从「现在」起推，之前的状态由 REST 拉。
-// - `{ type: "resync", sinceSeq, fromSeq }`：补发窗口已过、中间有缺口 → 全量 invalidateQueries。
+//   补发帧与实时帧走同一条 dispatch → 订阅者路径（题目 B4：断线期间的事件重连后出现且不重复），
+//   所以每个订阅者的 handler 必须幂等：同一事件重放只能得到同一份缓存。
+//   lastSeq 只在所有 handler 都处理成功后推进：先推进再处理的话，handler 抛错的那一帧就永久漏掉；
+//   不推进则下次重连服务端还会补发它（幂等 handler 重放无害）。
+// - `{ type: "resync", sinceSeq, fromSeq }`：补发窗口已过、(sinceSeq, fromSeq] 之间有缺口 →
+//   全量 invalidateQueries，并把 lastSeq 推到 fromSeq（服务端从那里起推；不推进的话下一次
+//   重连又带着旧 sinceSeq 去要，每次都 resync、每次都全量重拉）。
+// - 没有补发点的重连：这一页从连上起一条事件都没收到过（lastSeq 仍是 0）就断了线，重连时带不了
+//   sinceSeq，服务端只会从「现在」起推，断线期间的事件谁也补不回来 —— 这时按 resync 处理，
+//   全量重拉一次让 REST 把断线期间的变化带回来（2026-09-30 真机复现：开着群详情 kill 后端、
+//   curl 发两条再拉起，徽标回到「实时」但消息不出现，原因就是这个）。
+//   服务端若在 auth 成功帧里带当前 `seq`（`{ type: "auth", success: true, seq }`），这里直接把它当
+//   补发点采用，之后的重连就能真正补发而不用全量重拉；后端还没带时这条路径自动不生效。
 // - 心跳：每 heartbeatMs 发 `{ type: "ping" }`，服务端回 `{ type: "pong" }`；一个周期内
 //   没收到任何帧就主动 close() 触发重连（半开连接浏览器不会自己报 close）。
-// - 重连：指数退避（500ms 起、上限 30s、带抖动），auth 通过后归零；回前台 / online 立即重连；
-//   disconnectRealtime()（登出）不重连并清 lastSeq。认证被拒（4401）也不重连：token 已失效，
-//   等重新登录后由 connectRealtime() 再连（单飞 refresh 随后端 auth 一起落地后在这里接）。
+// - 重连：指数退避（500ms 起、上限 30s、带抖动 —— 首次 ≤ 600ms，给 B4「3 秒内」留足余量），
+//   auth 通过后归零；回前台 / online 立即重连；disconnectRealtime()（登出）不重连并清 lastSeq。
+//   认证被拒（4401）也不重连：token 已失效，等重新登录后由 connectRealtime() 再连
+//   （单飞 refresh 随后端 auth 一起落地后在这里接）。
+// - 状态给壳上的徽标用：reconnecting = 断线且已排重连（含重试中的 socket）；syncing = 带 sinceSeq
+//   重连成功、服务端正在补发 —— 补发没有结束帧，事件帧安静 syncSettleMs 后才算 open。
 // - 可注入 WebSocket 构造器与时钟：测试用假 socket 推帧，断言发出的帧与缓存变化。
 //
 // 事件 seq 跳号不当作丢帧：ws_events.seq 是 PG 序列，事务回滚会留下合法的空号。
@@ -28,8 +43,12 @@ export interface RealtimeEvent<T = unknown> {
 
 export type RealtimeListener = (event: RealtimeEvent) => void;
 
-/** connecting = socket 已开但 auth 未通过；open = 收到 auth success。 */
-export type ConnectionStatus = "idle" | "connecting" | "open" | "closed";
+/**
+ * connecting = 首次建连，socket 已开但 auth 未通过；reconnecting = 断线后在退避 / 重试中；
+ * syncing = 带 sinceSeq 重连成功、服务端补发中；open = 实时；closed = 不再重连（登出 / 认证被拒 / 无 token）。
+ */
+export type ConnectionStatus =
+  "idle" | "connecting" | "reconnecting" | "syncing" | "open" | "closed";
 
 // ---- 事件 payload（后端 src/services/ws-events.ts 的注释是契约；WS 帧不在 openapi 里，派生不了，手写）----
 
@@ -94,6 +113,8 @@ export interface RealtimeConfig {
   heartbeatMs: number;
   backoffBaseMs: number;
   backoffMaxMs: number;
+  /** 补发中（syncing）连续这么久没有事件帧就视为补完、转 open。 */
+  syncSettleMs: number;
   random: () => number;
 }
 
@@ -151,6 +172,7 @@ const config: RealtimeConfig = {
   heartbeatMs: 25_000,
   backoffBaseMs: 500,
   backoffMaxMs: 30_000,
+  syncSettleMs: 500,
   random: Math.random,
 };
 
@@ -165,6 +187,9 @@ let awaitingPong = false;
 let windowListenersBound = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let syncSettleTimer: ReturnType<typeof setTimeout> | null = null;
+/** 这一页里 auth 通过过至少一次：之后没有补发点的重连要全量重拉。 */
+let everAuthenticated = false;
 const listeners = new Set<RealtimeListener>();
 const statusListeners = new Set<(status: ConnectionStatus) => void>();
 
@@ -194,6 +219,22 @@ function stopHeartbeat(): void {
 
   heartbeatTimer = null;
   awaitingPong = false;
+}
+
+function stopSyncSettle(): void {
+  if (syncSettleTimer !== null) clearTimeout(syncSettleTimer);
+
+  syncSettleTimer = null;
+}
+
+/** 补发中：每来一帧就把「安静期」重新计时，到点转 open。 */
+function touchSyncSettle(ws: SocketLike): void {
+  stopSyncSettle();
+  syncSettleTimer = setTimeout(() => {
+    syncSettleTimer = null;
+
+    if (socket === ws && status === "syncing") setStatus("open");
+  }, config.syncSettleMs);
 }
 
 function startHeartbeat(ws: SocketLike): void {
@@ -235,6 +276,7 @@ function scheduleReconnect(): void {
   const delay = backoffDelay();
 
   attempts += 1;
+  setStatus("reconnecting");
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     openSocket();
@@ -260,7 +302,7 @@ function bindWindowListeners(): void {
 }
 
 type ControlFrame =
-  | { type: "auth"; success: boolean }
+  | { type: "auth"; success: boolean; seq?: number }
   | { type: "pong" }
   | { type: "resync"; sinceSeq: number; fromSeq: number };
 
@@ -288,13 +330,15 @@ function parseFrame(data: unknown): Frame {
 
   if (typeof type !== "string") return null;
 
-  if (typeof seq === "number")
-    return { kind: "event", event: { seq, type, payload } };
-
+  // 控制帧先于事件帧判断：auth 成功帧将来可能带当前 seq，不能因此被当成事件。
   if (type === "auth")
     return {
       kind: "control",
-      frame: { type, success: frame.success === true },
+      frame: {
+        type,
+        success: frame.success === true,
+        ...(typeof seq === "number" ? { seq } : {}),
+      },
     };
 
   if (type === "pong") return { kind: "control", frame: { type } };
@@ -309,33 +353,65 @@ function parseFrame(data: unknown): Frame {
       },
     };
 
+  if (typeof seq === "number")
+    return { kind: "event", event: { seq, type, payload } };
+
   return null;
+}
+
+function advanceSeq(seq: number): void {
+  if (!Number.isFinite(seq) || seq <= lastSeq) return;
+
+  lastSeq = seq;
+  storeSeq(lastSeq);
 }
 
 function dispatch(event: RealtimeEvent): void {
   // 按 seq 去重：补发与正常推送可能重叠，只有比 lastSeq 大的才算新事件。
   if (event.seq <= lastSeq) return;
 
-  // 先推进后处理：handler 抛错也不会让这一条被重复处理。
-  lastSeq = event.seq;
-  storeSeq(lastSeq);
+  let failed = false;
 
   for (const listener of listeners) {
     try {
       listener(event);
     } catch (error) {
+      failed = true;
       console.error("realtime handler failed", event.type, error);
     }
   }
+
+  // 只在全部 handler 成功后推进：抛错的那一帧不算「已处理」，下次重连服务端还会补发它
+  //（后面的帧照常推进 lastSeq，所以它最多被多补发一次；handler 幂等即无害）。
+  if (!failed) advanceSeq(event.seq);
 }
 
-function handleControl(ws: SocketLike, frame: ControlFrame): void {
+function handleControl(
+  ws: SocketLike,
+  frame: ControlFrame,
+  resumedFrom: number,
+): void {
   switch (frame.type) {
     case "auth":
       if (frame.success) {
         attempts = 0;
-        setStatus("open");
         startHeartbeat(ws);
+
+        // 服务端报了当前 seq：作为补发点采用，之后断线就能真正补发。
+        if (frame.seq !== undefined) advanceSeq(frame.seq);
+
+        if (resumedFrom > 0) {
+          // 带了 sinceSeq：服务端正在补发（紧跟在 auth 帧之后、同一条 socket 上按 seq 顺序到达）。
+          setStatus("syncing");
+          touchSyncSettle(ws);
+        } else {
+          // 之前连上过却拿不出补发点（从没收到过事件）：断线期间的事件补不回来，按 resync 全量重拉。
+          if (everAuthenticated) config.onResync();
+
+          setStatus("open");
+        }
+
+        everAuthenticated = true;
       } else {
         // 服务端随后会以 4401 关闭；这里先标记，onclose 就不再排重连。
         authRejected = true;
@@ -343,7 +419,9 @@ function handleControl(ws: SocketLike, frame: ControlFrame): void {
 
       break;
     case "resync":
-      // (sinceSeq, fromSeq] 之间的事件不再补发：缓存里可能缺状态，全量重拉。
+      // (sinceSeq, fromSeq] 之间的事件不再补发：缓存里可能缺状态，全量重拉；
+      // 水位跟着服务端走到 fromSeq，下次重连不再拿旧 sinceSeq 去要同一段缺口。
+      advanceSeq(frame.fromSeq);
       config.onResync();
       break;
     case "pong":
@@ -371,11 +449,25 @@ function openSocket(): void {
 
   loadStoredSeq();
   manuallyClosed = false;
-  setStatus("connecting");
+  // 重试中的 socket 仍算「重连中」，徽标不在 重连中 / 连接中 之间来回跳。
+  setStatus(attempts > 0 ? "reconnecting" : "connecting");
 
-  const ws = config.createSocket(config.url || defaultUrl());
+  let ws: SocketLike;
+
+  try {
+    ws = config.createSocket(config.url || defaultUrl());
+  } catch (error) {
+    // 构造器抛错（地址非法、被扩展拦截）也走退避重连，而不是让定时器回调把异常抛到顶层。
+    console.error("realtime socket failed to open", error);
+    scheduleReconnect();
+
+    return;
+  }
 
   socket = ws;
+
+  // 这条 socket 的认证帧带的 sinceSeq：> 0 表示服务端会先补发，auth 通过后进入 syncing。
+  const resumedFrom = lastSeq;
 
   ws.onopen = () => {
     if (socket !== ws) return;
@@ -385,7 +477,7 @@ function openSocket(): void {
       JSON.stringify({
         type: "auth",
         accessToken: token,
-        ...(lastSeq > 0 ? { sinceSeq: lastSeq } : {}),
+        ...(resumedFrom > 0 ? { sinceSeq: resumedFrom } : {}),
       }),
     );
   };
@@ -399,8 +491,11 @@ function openSocket(): void {
 
     if (!frame) return;
 
-    if (frame.kind === "event") dispatch(frame.event);
-    else handleControl(ws, frame.frame);
+    if (frame.kind === "event") {
+      if (status === "syncing") touchSyncSettle(ws);
+
+      dispatch(frame.event);
+    } else handleControl(ws, frame.frame, resumedFrom);
   };
 
   ws.onerror = () => {
@@ -411,12 +506,14 @@ function openSocket(): void {
     if (socket !== ws) return;
 
     stopHeartbeat();
+    stopSyncSettle();
     socket = null;
-    setStatus("closed");
 
     if (event?.code === WS_CLOSE_UNAUTHORIZED) authRejected = true;
 
-    scheduleReconnect();
+    // 非手动关闭 → 排退避重连，状态是 reconnecting；登出 / 认证被拒才是 closed。
+    if (manuallyClosed || authRejected) setStatus("closed");
+    else scheduleReconnect();
   };
 }
 
@@ -458,6 +555,7 @@ export function disconnectRealtime(): void {
   manuallyClosed = true;
   clearReconnectTimer();
   stopHeartbeat();
+  stopSyncSettle();
 
   const ws = socket;
 
@@ -465,6 +563,7 @@ export function disconnectRealtime(): void {
   ws?.close(1000, "logout");
   lastSeq = 0;
   attempts = 0;
+  everAuthenticated = false;
   storeSeq(0);
   setStatus("closed");
 }
