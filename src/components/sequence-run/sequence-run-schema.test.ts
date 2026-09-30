@@ -82,4 +82,17 @@ describe("toStartSequenceRunPayload", () => {
       }).vars,
     ).toEqual({ k: "second" });
   });
+
+  // 前端 #15：`__proto__` 过得了 key 校验；折进普通 {} 时赋值走的是原型 setter，这一行被静默丢掉
+  it("keeps a __proto__ key as an own property of vars and stepVars", () => {
+    const payload = toStartSequenceRunPayload({
+      sequenceId: "s1",
+      vars: [{ key: "__proto__", value: "v0" }],
+      stepVars: [{ stepIndex: "2", key: "__proto__", value: "v2" }],
+    });
+
+    expect(JSON.stringify(payload)).toBe(
+      '{"sequenceId":"s1","vars":{"__proto__":"v0"},"stepVars":{"2":{"__proto__":"v2"}}}',
+    );
+  });
 });

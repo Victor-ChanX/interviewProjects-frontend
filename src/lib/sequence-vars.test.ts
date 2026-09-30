@@ -206,6 +206,57 @@ describe("resolveSequenceVars", () => {
     expect(result.steps[0]?.rendered).toBe("no placeholders");
   });
 
+  // 前端 #15：取值表是普通 {} 时 `{constructor}` 会读到原型链上的函数、被判为已解析，预检误报通过
+  it("does not resolve Object.prototype members as vars", () => {
+    const result = resolveSequenceVars(
+      [{ index: 1, text: "{constructor} {toString} {hasOwnProperty}" }],
+      {},
+      {},
+    );
+
+    expect(result.unresolved).toEqual([
+      { stepIndex: 1, key: "constructor" },
+      { stepIndex: 1, key: "toString" },
+      { stepIndex: 1, key: "hasOwnProperty" },
+    ]);
+    expect(result.steps[0]?.rendered).toBe(
+      "{constructor} {toString} {hasOwnProperty}",
+    );
+  });
+
+  it("treats __proto__ as an ordinary key", () => {
+    // JSON.parse 出来的 __proto__ 是自有属性（字面量 { __proto__: … } 会改原型，不能用来造数）
+    const vars = JSON.parse('{"__proto__": "v0"}') as Record<string, string>;
+    const stepVars = JSON.parse('{"2": {"__proto__": "v2"}}') as Record<
+      string,
+      Record<string, string>
+    >;
+    const result = resolveSequenceVars(
+      [
+        { index: 1, text: "{__proto__}" },
+        { index: 2, text: "{__proto__}" },
+      ],
+      vars,
+      stepVars,
+    );
+
+    expect(result.unresolved).toEqual([]);
+    expect(result.steps.map((step) => step.rendered)).toEqual(["v0", "v2"]);
+    expect(result.steps[1]?.entries).toEqual([
+      { key: "__proto__", value: "v2", source: "step:2" },
+    ]);
+  });
+
+  it("reports an unset __proto__ placeholder as unresolved", () => {
+    const result = resolveSequenceVars(
+      [{ index: 1, text: "{__proto__}" }],
+      {},
+      {},
+    );
+
+    expect(result.unresolved).toEqual([{ stepIndex: 1, key: "__proto__" }]);
+  });
+
   it("returns empty steps for an empty sequence", () => {
     expect(resolveSequenceVars([], { a: "1" }, {})).toEqual({
       steps: [],

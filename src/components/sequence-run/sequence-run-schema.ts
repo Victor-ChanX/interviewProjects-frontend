@@ -41,18 +41,21 @@ export const EMPTY_START_FORM: StartSequenceRunFormValues = {
   stepVars: [],
 };
 
-/** 同一 key 出现多行时后一行覆盖前一行（与 JSON 对象的语义一致）。 */
+/**
+ * 同一 key 出现多行时后一行覆盖前一行（与 JSON 对象的语义一致）。
+ * 折成的对象不带原型：`__proto__` 过得了 key 校验，写进普通 {} 会走原型 setter、被静默丢掉。
+ */
 export function toStartSequenceRunPayload(
   values: StartSequenceRunFormValues,
 ): StartSequenceRunPayload {
-  const vars: Record<string, string> = {};
+  const vars: Record<string, string> = Object.create(null);
 
   for (const row of values.vars) vars[row.key] = row.value;
 
-  const stepVars: Record<string, Record<string, string>> = {};
+  const stepVars: Record<string, Record<string, string>> = Object.create(null);
 
   for (const row of values.stepVars) {
-    const step = (stepVars[row.stepIndex] ??= {});
+    const step = (stepVars[row.stepIndex] ??= Object.create(null));
 
     step[row.key] = row.value;
   }

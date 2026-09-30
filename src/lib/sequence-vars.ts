@@ -87,8 +87,10 @@ export function resolveSequenceVars(
   vars: VarMap,
   stepVars: StepVarMap,
 ): ResolveSequenceVarsResult {
-  const current: Record<string, string> = {};
-  const source: Record<string, VarSource> = {};
+  // 取值表不带原型：key 来自用户文本，普通 {} 会让 `{constructor}` 读到原型链上的函数、
+  // 被当成「已解析」（前端 #15）；`__proto__` 在这里也只是一个普通 key
+  const current: Record<string, string> = Object.create(null);
+  const source: Record<string, VarSource> = Object.create(null);
 
   for (const [key, value] of Object.entries(vars)) {
     // vars 里的 "" 视为未提供
@@ -114,7 +116,7 @@ export function resolveSequenceVars(
     }
 
     const entries: ResolvedVarEntry[] = [];
-    const resolved: Record<string, string> = {};
+    const resolved: Record<string, string> = Object.create(null);
 
     for (const key of extractPlaceholders(step.text)) {
       const value = current[key];
