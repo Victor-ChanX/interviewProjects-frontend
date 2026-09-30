@@ -1,7 +1,8 @@
 // 异步任务（建群 / 全部退群）的枚举与步骤 → 中文文案。群列表的新建群弹窗与群详情的全部退群弹窗共用
 // （frontend-component-splitting split.promote-shared：被 2+ feature 用到就提升），进度原子
-// src/components/ui-atoms/job-progress.tsx 用它渲染。样式全部走主题 token。
+// src/components/ui-atoms/job-progress.tsx 用它渲染。样式按语气取（src/lib/status-tone.ts）。
 
+import type { StatusTone } from "@/lib/status-tone";
 import type { JobKind, JobStatus, JobStepKind } from "@/services/job-service";
 
 export const JOB_KIND_LABELS: Readonly<Record<JobKind, string>> = {
@@ -15,10 +16,10 @@ export const JOB_STATUS_LABELS: Readonly<Record<JobStatus, string>> = {
   failed: "失败",
 };
 
-export const JOB_STATUS_CLASS: Readonly<Record<JobStatus, string>> = {
-  running: "border-warning/40 bg-warning/15 text-warning",
-  finished: "border-success/40 bg-success/15 text-success",
-  failed: "border-destructive/40 bg-destructive/15 text-destructive",
+export const JOB_STATUS_TONE: Readonly<Record<JobStatus, StatusTone>> = {
+  running: "info",
+  finished: "success",
+  failed: "danger",
 };
 
 export const JOB_STEP_KIND_LABELS: Readonly<Record<JobStepKind, string>> = {

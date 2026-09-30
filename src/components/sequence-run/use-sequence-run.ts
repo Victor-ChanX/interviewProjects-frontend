@@ -64,9 +64,15 @@ export interface UseSequenceRunOptions {
   groupId: string;
   /** viewer 不渲染表单，也不拉序列列表。 */
   enabled: boolean;
+  /** 从定时序列页「在群启动」进来时带的序列 id（URL `?sequenceId=`）：表单初始就选中它。 */
+  initialSequenceId?: string;
 }
 
-export function useSequenceRun({ groupId, enabled }: UseSequenceRunOptions) {
+export function useSequenceRun({
+  groupId,
+  enabled,
+  initialSequenceId = "",
+}: UseSequenceRunOptions) {
   const queryClient = useQueryClient();
   // 刚启动的 run：群详情的 activeSequenceRunId 在 run 结束后会变回 null，本页仍要继续展示它。
   const [startedRunId, setStartedRunId] = useState<string | null>(null);
@@ -103,9 +109,9 @@ export function useSequenceRun({ groupId, enabled }: UseSequenceRunOptions) {
 
   const form = useForm<StartSequenceRunFormValues>({
     resolver: zodResolver(startSequenceRunSchema),
-    defaultValues: EMPTY_START_FORM,
+    defaultValues: { ...EMPTY_START_FORM, sequenceId: initialSequenceId },
   });
-  const { control, getValues, handleSubmit, setValue } = form;
+  const { control, getValues, handleSubmit } = form;
   const varRows = useFieldArray({ control, name: "vars" });
   const stepVarRows = useFieldArray({ control, name: "stepVars" });
 
@@ -225,12 +231,6 @@ export function useSequenceRun({ groupId, enabled }: UseSequenceRunOptions) {
     }
   }, [getValues, selectedSequence, varRows]);
 
-  /** 新建序列后把它选中（容器接到 use-create-sequence 的 onCreated）。 */
-  const selectSequence = useCallback(
-    (id: string) => setValue("sequenceId", id, { shouldValidate: true }),
-    [setValue],
-  );
-
   const group = groupQuery.data;
   const disabledReason = group
     ? (WRITE_BLOCKED_REASON[group.status] ??
@@ -254,7 +254,6 @@ export function useSequenceRun({ groupId, enabled }: UseSequenceRunOptions) {
     serverUnresolved,
     disabledReason,
     fillPlaceholders,
-    selectSequence,
     submit: handleSubmit(onValid),
     preflightOpen,
     setPreflightOpen,

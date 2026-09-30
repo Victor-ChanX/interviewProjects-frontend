@@ -13,11 +13,13 @@ export const router = createBrowserRouter([
     path: "/",
     lazy: () => import("./layout"),
     children: [
-      // 首页没有内容，直接落到账号列表（与 src/lib/login-redirect.ts 的 DEFAULT_AFTER_LOGIN 同口径）。
-      { index: true, element: <Navigate to="/accounts" replace /> },
-      // 前端 #3：账号列表
+      // 登录后默认进工作台（与 src/lib/login-redirect.ts 的 DEFAULT_AFTER_LOGIN 同口径）。
+      { index: true, element: <Navigate to="/dashboard" replace /> },
+      // 前端 #12：工作台（概览 / 需要处理 / 实时动态）
+      { path: "dashboard", lazy: () => import("./dashboard/page") },
+      // 前端 #3：账号管理
       { path: "accounts", lazy: () => import("./accounts/page") },
-      // 前端 #4：群列表 + 群详情（含成员 / 消息时间线 / agent run 列表）
+      // 前端 #4：群组管理 + 群详情（消息 / 成员 / Agent 运行 / 序列）
       { path: "groups", lazy: () => import("./groups/page") },
       {
         path: "groups/:groupId",
@@ -28,12 +30,18 @@ export const router = createBrowserRouter([
         path: "groups/:groupId/sequences",
         lazy: () => import("./groups/[groupId]/sequences/page"),
       },
-      // 前端 #5：agent run 详情（步骤表 + 协议错误步的原始响应）
+      // 前端 #12：定时序列（序列定义列表 + 新建 + 在群启动）
+      { path: "sequences", lazy: () => import("./sequences/page") },
+      // 前端 #12：Agent 运行（全部群）；前端 #5：运行详情（步骤表 + 协议错误步的原始响应）
+      { path: "agent-runs", lazy: () => import("./agent-runs/page") },
       {
         path: "agent-runs/:runId",
         lazy: () => import("./agent-runs/[runId]/page"),
       },
-      // 前端 #9：LLM 设置（Base URL / API Key / 模型；viewer 只读）
+      // 前端 #12：实时动态、异常中心
+      { path: "activity", lazy: () => import("./activity/page") },
+      { path: "inconsistencies", lazy: () => import("./inconsistencies/page") },
+      // 前端 #9：模型设置（Claude / Gemini 的 API Key 与模型；viewer 只读）
       { path: "settings/llm", lazy: () => import("./settings/llm/page") },
       { path: "*", lazy: () => import("./not-found") },
     ],

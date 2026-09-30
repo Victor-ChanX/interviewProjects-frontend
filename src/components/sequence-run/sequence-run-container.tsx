@@ -1,26 +1,33 @@
 // container：hook 编排 + 权限分支；渲染就绪的数据与回调通过 props 交给 view。
 // 业务流（预检 / 启动 / 422 与 409 的处理 / 实时订阅）都在 use-sequence-run；这里只把 hook 输出拼成 view 的 props。
+// 新建序列在「定时序列」页（前端 #12）；从那里「在群启动」进来时带 ?sequenceId=，表单初始选中它。
 
 import { useCallback, useMemo } from "react";
 
-import { useRealtimeStatus } from "@/hooks/use-realtime";
 import { useSession } from "@/hooks/use-session";
+import { groupDisplayName } from "@/lib/short-id";
 
 import { SequenceRunView } from "./sequence-run-view";
 import type {
-  CreateSequenceFormViewProps,
   SequenceFormViewProps,
   SequenceRunProgressViewProps,
 } from "./types";
-import { useCreateSequence } from "./use-create-sequence";
 import { useSequenceRun } from "./use-sequence-run";
 
-export function SequenceRunContainer({ groupId }: { groupId: string }) {
+export function SequenceRunContainer({
+  groupId,
+  initialSequenceId,
+}: {
+  groupId: string;
+  initialSequenceId?: string;
+}) {
   const canWrite = useSession()?.canWrite ?? false;
-  const connection = useRealtimeStatus();
-  const state = useSequenceRun({ groupId, enabled: canWrite });
-  const { refetchGroup, refetchRun, selectSequence } = state;
-  const create = useCreateSequence(selectSequence);
+  const state = useSequenceRun({
+    groupId,
+    enabled: canWrite,
+    initialSequenceId,
+  });
+  const { refetchGroup, refetchRun } = state;
 
   const onGroupRetry = useCallback(() => {
     void refetchGroup();
@@ -65,20 +72,6 @@ export function SequenceRunContainer({ groupId }: { groupId: string }) {
     ],
   );
 
-  const createForm = useMemo<CreateSequenceFormViewProps | null>(
-    () =>
-      canWrite
-        ? {
-            register: create.register,
-            errors: create.errors,
-            steps: create.steps,
-            submitting: create.submitting,
-            onSubmit: create.submit,
-          }
-        : null,
-    [canWrite, create],
-  );
-
   const progress = useMemo<SequenceRunProgressViewProps | null>(
     () =>
       state.runId
@@ -103,7 +96,7 @@ export function SequenceRunContainer({ groupId }: { groupId: string }) {
   return (
     <SequenceRunView
       groupId={groupId}
-      connection={connection}
+      groupName={state.group ? groupDisplayName(state.group) : ""}
       groupLoading={state.groupLoading}
       groupError={state.groupError}
       groupRetrying={state.groupRetrying}
@@ -117,7 +110,6 @@ export function SequenceRunContainer({ groupId }: { groupId: string }) {
         onConfirm: state.confirmStart,
       }}
       progress={progress}
-      createForm={createForm}
     />
   );
 }

@@ -8,12 +8,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { SearchableSelect } from "@/components/ui-atoms/searchable-select";
 
 import type { LlmSettingsFormViewProps } from "./types";
-
-const SELECT_CLASS =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 function FieldError({ message }: { message: string | undefined }) {
   return message ? <p className="text-xs text-destructive">{message}</p> : null;
@@ -48,22 +49,22 @@ export function LlmSettingsFormView({
       <fieldset className="flex flex-col gap-4" disabled={locked}>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="llm-provider">服务商</Label>
-          <select
+          <NativeSelect
             id="llm-provider"
-            className={SELECT_CLASS}
+            className="w-full"
             value={provider}
             aria-invalid={errors.provider ? true : undefined}
             onChange={(event) => onProviderChange(event.target.value)}
           >
-            <option value="" disabled>
+            <NativeSelectOption value="" disabled>
               请选择服务商
-            </option>
+            </NativeSelectOption>
             {providers.map((item) => (
-              <option key={item.id} value={item.id}>
+              <NativeSelectOption key={item.id} value={item.id}>
                 {item.label}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
           <FieldError message={errors.provider?.message} />
         </div>
 
@@ -110,7 +111,7 @@ export function LlmSettingsFormView({
           ) : null}
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="llm-model">对话模型</Label>
             <SearchableSelect
@@ -141,7 +142,7 @@ export function LlmSettingsFormView({
         </div>
       </fieldset>
 
-      <Button type="submit" size="sm" className="self-end" disabled={locked}>
+      <Button type="submit" className="self-end" disabled={locked}>
         {saving ? "保存中…" : "保存"}
       </Button>
     </form>

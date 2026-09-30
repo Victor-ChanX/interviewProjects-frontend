@@ -127,14 +127,12 @@ export function PreflightDialogView({
           ))}
         </DialogBody>
         <DialogFooter>
-          {/* 方向是 Button 渲染成 DialogClose：ui/button 没有 forwardRef，反过来写 Base UI 会往 Button 上挂 ref 而告警。 */}
-          <Button
-            variant="outline"
-            render={<DialogClose />}
+          <DialogClose
+            render={<Button variant="outline" />}
             disabled={starting}
           >
             取消
-          </Button>
+          </DialogClose>
           <Button
             type="button"
             disabled={blocked || starting || !result}

@@ -7,12 +7,12 @@ import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 
 import { useAccountEvents } from "@/hooks/use-account-events";
-import { useRealtimeStatus } from "@/hooks/use-realtime";
 import { useSession } from "@/hooks/use-session";
 import { getErrorMessage } from "@/lib/get-error-message";
 import type { GroupMemberRead, GroupStatus } from "@/services/group-service";
 
 import { GroupDetailView } from "./group-detail-view";
+import type { GroupTab } from "./group-tabs";
 import type {
   GroupSetting,
   LeaveAllDialogViewProps,
@@ -20,6 +20,7 @@ import type {
 } from "./types";
 import { useAgentRuns } from "./use-agent-runs";
 import { useGroupDetail } from "./use-group-detail";
+import { useGroupTab } from "./use-group-tab";
 import { useLeaveAll } from "./use-leave-all";
 import { useMessageTimeline } from "./use-message-timeline";
 import { useSendMessage } from "./use-send-message";
@@ -39,7 +40,7 @@ const NO_MEMBERS: GroupMemberRead[] = [];
 
 export function GroupDetailContainer({ groupId }: { groupId: string }) {
   const canWrite = useSession()?.canWrite ?? false;
-  const connection = useRealtimeStatus();
+  const [tab, setTab] = useGroupTab();
   const detail = useGroupDetail(groupId);
   const timeline = useMessageTimeline(groupId);
   const agentRuns = useAgentRuns(groupId);
@@ -62,6 +63,13 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
       }
     },
     [toggleSetting],
+  );
+
+  const onTabChange = useCallback(
+    (next: GroupTab) => {
+      void setTab(next === "messages" ? null : next);
+    },
+    [setTab],
   );
 
   const onRetry = useCallback(() => {
@@ -124,7 +132,8 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
       error={detail.error}
       retrying={detail.retrying}
       onRetry={onRetry}
-      connection={connection}
+      tab={tab}
+      onTabChange={onTabChange}
       canWrite={canWrite}
       savingSetting={detail.savingSetting}
       onToggleSetting={onToggleSetting}

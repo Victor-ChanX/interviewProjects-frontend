@@ -14,6 +14,9 @@ import { useAgentRunDetail } from "./use-agent-run-detail";
 
 const listeners = vi.hoisted(() => new Set<(event: unknown) => void>());
 const getAgentRun = vi.hoisted(() => vi.fn());
+const listGroups = vi.hoisted(() =>
+  vi.fn().mockResolvedValue([{ id: "g1", gatewayGroupId: "g_abc" }]),
+);
 
 vi.mock("@/lib/ws", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/ws")>()),
@@ -25,6 +28,7 @@ vi.mock("@/lib/ws", async (importOriginal) => ({
     };
   },
 }));
+vi.mock("@/services/group-service", () => ({ listGroups }));
 vi.mock("@/services/agent-run-service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/agent-run-service")>()),
   getAgentRun,
@@ -108,6 +112,8 @@ describe("useAgentRunDetail", () => {
     expect(result.current.run?.steps[0]?.rawResponse).toBe("{not json");
     expect(result.current.error).toBeNull();
     expect(result.current.blocked).toBe(false);
+    // 所在群用网关群 ID 显示（群列表缓存里查）。
+    await waitFor(() => expect(result.current.groupName).toBe("g_abc"));
   });
 
   it("refetches after an agent_run event for the same runId and ignores other runs", async () => {

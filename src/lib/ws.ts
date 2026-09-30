@@ -92,6 +92,37 @@ export type GroupSettingsChangedEventPayload = {
   autoKickEnabled: boolean;
 };
 
+/** 不一致记录被标记为已处理（后端 #22；只在「未处理 → 已处理」那一次推）。操作回执，不进动态流。 */
+export type InconsistencyResolvedEventPayload = {
+  id: string;
+  resolvedAt: string;
+  resolvedBy: string;
+};
+
+/**
+ * 后端推的全部事件 type（后端 src/services/ws-events.ts 的 WS_EVENT_TYPES，同一份契约）。
+ * 除 inconsistency_resolved 外都进「实时动态」（GET /api/activity 的白名单同口径）。
+ */
+export const REALTIME_EVENT_TYPES = [
+  "account_status_changed",
+  "account_terminal",
+  "inconsistency",
+  "message",
+  "agent_run",
+  "sequence_run",
+  "member_changed",
+  "group_status_changed",
+  "group_settings_changed",
+  "job",
+  "inconsistency_resolved",
+] as const;
+
+type RealtimeEventType = (typeof REALTIME_EVENT_TYPES)[number];
+
+/** 进「实时动态」的事件 type：操作回执（inconsistency_resolved）不进。 */
+export const ACTIVITY_EVENT_TYPES: readonly RealtimeEventType[] =
+  REALTIME_EVENT_TYPES.filter((type) => type !== "inconsistency_resolved");
+
 /** 只用到的那一小片 WebSocket 接口，方便测试注入假实现。 */
 export interface SocketLike {
   readyState: number;

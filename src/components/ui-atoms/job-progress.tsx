@@ -5,15 +5,14 @@
 import { AlertTriangle, Loader2 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui-atoms/status-badge";
 import {
   describeJobErrorCode,
   describeJobStep,
   JOB_KIND_LABELS,
-  JOB_STATUS_CLASS,
   JOB_STATUS_LABELS,
+  JOB_STATUS_TONE,
 } from "@/lib/job-labels";
-import { cn } from "@/lib/utils";
 import type { JobRead } from "@/services/job-service";
 
 export interface JobProgressProps {
@@ -34,12 +33,12 @@ export function JobProgress({ job, errorMessage }: JobProgressProps) {
             {JOB_KIND_LABELS[job.kind]}
           </span>
         ) : null}
-        <Badge variant="outline" className={cn(JOB_STATUS_CLASS[status])}>
+        <StatusBadge tone={JOB_STATUS_TONE[status]} dot={status !== "running"}>
           {status === "running" ? (
             <Loader2 className="size-3 animate-spin" />
           ) : null}
           {JOB_STATUS_LABELS[status]}
-        </Badge>
+        </StatusBadge>
         {job ? (
           <span className="font-mono text-xs text-muted-foreground">
             {job.id}

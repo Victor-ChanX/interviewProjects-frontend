@@ -10,12 +10,14 @@ vi.mock("@/lib/auth", () => ({ getAccessToken }));
 vi.mock("@/lib/request", () => ({ refreshAccessToken }));
 
 import {
+  ACTIVITY_EVENT_TYPES,
   configureRealtime,
   connectRealtime,
   disconnectRealtime,
   getConnectionStatus,
   getLastSeq,
   LAST_SEQ_STORAGE_KEY,
+  REALTIME_EVENT_TYPES,
   resetRealtimeForTests,
   subscribeRealtime,
   WS_CLOSE_UNAUTHORIZED,
@@ -638,5 +640,13 @@ describe("unauthorized (4401) → refresh", () => {
     // 刷新期间登出：结果作废，不重连。
     expect(sockets).toHaveLength(1);
     expect(getConnectionStatus()).toBe("closed");
+  });
+});
+
+describe("event types", () => {
+  it("knows inconsistency_resolved but keeps it out of the activity feed", () => {
+    expect(REALTIME_EVENT_TYPES).toContain("inconsistency_resolved");
+    expect(ACTIVITY_EVENT_TYPES).not.toContain("inconsistency_resolved");
+    expect(ACTIVITY_EVENT_TYPES).toHaveLength(REALTIME_EVENT_TYPES.length - 1);
   });
 });

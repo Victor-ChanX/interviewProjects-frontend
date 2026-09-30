@@ -1,33 +1,109 @@
-// 某群的 agent run 列表：纯展示，最新在前。blocked（审计拦下）醒目：顶部 Alert + 行高亮；
-// 当前进行中的 run（activeRunId）行加左侧强调；run id 链接到详情页（前端 #5）。原生 <table>：共享 DataTable 尚未落地。
-// 状态 / 结束原因的文案与徽标样式在 @/lib/agent-run-labels（与详情页共用）。
+// 某群的 Agent 运行：DataTable，最新在前。blocked（审计拦下）醒目：顶部 Alert + 整行标红；
+// 当前进行中的那一次左侧强调；run 链接到详情页。状态 / 结束原因的文案在 @/lib/agent-run-labels。
 
 import { AlertTriangle } from "lucide-react";
+import { useMemo } from "react";
 import { Link } from "react-router";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { DataTable } from "@/components/ui-atoms/data-table";
+import { dataTableColumnHelper } from "@/components/ui-atoms/data-table-columns";
 import { QueryError } from "@/components/ui-atoms/query-error";
+import { StatusBadge } from "@/components/ui-atoms/status-badge";
 import {
   AGENT_RUN_END_REASON_LABELS,
-  AGENT_RUN_STATUS_CLASS,
   AGENT_RUN_STATUS_LABELS,
+  AGENT_RUN_STATUS_TONE,
 } from "@/lib/agent-run-labels";
 import { formatDateTime } from "@/lib/format-date";
 import { getErrorMessage } from "@/lib/get-error-message";
+import { shortId } from "@/lib/short-id";
 import { cn } from "@/lib/utils";
+import type { AgentRunRead } from "@/services/agent-run-service";
 
 import type { AgentRunListViewProps } from "./types";
 
-const HEADERS = [
-  "Run ID",
-  "状态",
-  "结束原因",
-  "步数",
-  "耗时 / 预算",
-  "创建时间",
-  "摘要",
-] as const;
+const col = dataTableColumnHelper<AgentRunRead>();
+
+const Dash = () => <span className="text-muted-foreground">-</span>;
+
+function buildColumns(activeRunId: string | null) {
+  return col.columns([
+    col.accessor("id", {
+      header: "运行",
+      meta: { label: "运行", className: "w-36" },
+      cell: ({ row }) => (
+        <span className="flex items-center gap-1.5">
+          <Link
+            to={`/agent-runs/${encodeURIComponent(row.original.id)}`}
+            className="font-mono text-xs font-medium text-primary hover:underline"
+            title={row.original.id}
+            data-run-id={row.original.id}
+          >
+            {shortId(row.original.id)}
+          </Link>
+          {row.original.id === activeRunId ? (
+            <span className="text-xs text-muted-foreground">进行中</span>
+          ) : null}
+        </span>
+      ),
+    }),
+    col.accessor("status", {
+      header: "状态",
+      meta: { label: "状态", className: "w-28" },
+      cell: ({ row }) => (
+        <StatusBadge
+          tone={AGENT_RUN_STATUS_TONE[row.original.status]}
+          pulse={row.original.status === "running"}
+        >
+          {AGENT_RUN_STATUS_LABELS[row.original.status]}
+        </StatusBadge>
+      ),
+    }),
+    col.accessor("endReason", {
+      header: "结束原因",
+      meta: { label: "结束原因", className: "w-28" },
+      cell: ({ row }) =>
+        row.original.endReason ? (
+          AGENT_RUN_END_REASON_LABELS[row.original.endReason]
+        ) : (
+          <Dash />
+        ),
+    }),
+    col.accessor("stepCount", {
+      header: "步数",
+      meta: { label: "步数", className: "w-20 tabular-nums" },
+      cell: ({ row }) => `${row.original.stepCount} / ${row.original.maxSteps}`,
+    }),
+    col.accessor("accumulatedMs", {
+      header: "耗时 / 预算",
+      meta: { label: "耗时 / 预算", className: "w-28 tabular-nums" },
+      cell: ({ row }) =>
+        `${Math.round(row.original.accumulatedMs / 1000)}s / ${Math.round(row.original.budgetMs / 1000)}s`,
+    }),
+    col.accessor("createdAt", {
+      header: "创建时间",
+      meta: { label: "创建时间", className: "w-36" },
+      cell: ({ row }) => (
+        <time dateTime={row.original.createdAt}>
+          {formatDateTime(row.original.createdAt)}
+        </time>
+      ),
+    }),
+    col.accessor("summary", {
+      header: "摘要",
+      meta: { label: "摘要", className: "max-w-xs" },
+      cell: ({ row }) =>
+        row.original.summary ? (
+          <span className="block truncate" title={row.original.summary}>
+            {row.original.summary}
+          </span>
+        ) : (
+          <Dash />
+        ),
+    }),
+  ]);
+}
 
 export function AgentRunListView({
   runs,
@@ -37,21 +113,17 @@ export function AgentRunListView({
   activeRunId,
   onRetry,
 }: AgentRunListViewProps) {
+  const columns = useMemo(() => buildColumns(activeRunId), [activeRunId]);
+
   if (error)
     return (
       <QueryError
-        title="Agent run 列表加载失败"
+        title="Agent 运行加载失败"
         message={getErrorMessage(error)}
         retrying={retrying}
         onRetry={onRetry}
       />
     );
-
-  if (loading)
-    return <div className="h-32 animate-pulse rounded-md bg-muted" />;
-
-  if (runs.length === 0)
-    return <p className="text-sm text-muted-foreground">暂无 agent run</p>;
 
   const blocked = runs.filter((run) => run.status === "blocked");
 
@@ -61,95 +133,30 @@ export function AgentRunListView({
         <Alert variant="destructive">
           <AlertTriangle />
           <AlertTitle>
-            有 {blocked.length} 次运行被审计拦截（blocked）
+            有 {blocked.length} 次运行被拦下（审计拿不到结论）
           </AlertTitle>
           <AlertDescription>
-            {blocked.map((run) => (
-              <p key={run.id} className="font-mono text-xs">
-                {run.id}
-                {run.summary ? ` — ${run.summary}` : null}
-              </p>
-            ))}
+            对应的工具没有执行；点运行 ID 看是哪一步。
           </AlertDescription>
         </Alert>
       ) : null}
-
-      <div className="overflow-x-auto rounded-md border border-border">
-        <table className="w-full text-sm" data-testid="agent-run-list">
-          <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-            <tr>
-              {HEADERS.map((header) => (
-                <th key={header} className="px-3 py-2 font-medium">
-                  {header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {runs.map((run) => (
-              <tr
-                key={run.id}
-                className={cn({
-                  "bg-destructive/10": run.status === "blocked",
-                  "border-l-2 border-l-primary": run.id === activeRunId,
-                })}
-              >
-                <td className="px-3 py-2 font-mono text-xs">
-                  <Link
-                    to={`/agent-runs/${encodeURIComponent(run.id)}`}
-                    className="underline-offset-4 hover:underline"
-                  >
-                    {run.id}
-                  </Link>
-                  {run.id === activeRunId ? (
-                    <span className="ml-1 font-sans text-muted-foreground">
-                      （进行中）
-                    </span>
-                  ) : null}
-                </td>
-                <td className="px-3 py-2">
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "font-medium",
-                      AGENT_RUN_STATUS_CLASS[run.status],
-                    )}
-                  >
-                    {AGENT_RUN_STATUS_LABELS[run.status]}
-                  </Badge>
-                </td>
-                <td className="px-3 py-2">
-                  {run.endReason ? (
-                    AGENT_RUN_END_REASON_LABELS[run.endReason]
-                  ) : (
-                    <span className="text-muted-foreground">-</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 tabular-nums">
-                  {run.stepCount} / {run.maxSteps}
-                </td>
-                <td className="px-3 py-2 tabular-nums">
-                  {Math.round(run.accumulatedMs / 1000)}s /{" "}
-                  {Math.round(run.budgetMs / 1000)}s
-                </td>
-                <td className="px-3 py-2">
-                  <time dateTime={run.createdAt}>
-                    {formatDateTime(run.createdAt)}
-                  </time>
-                </td>
-                <td
-                  className="max-w-xs truncate px-3 py-2"
-                  title={run.summary ?? undefined}
-                >
-                  {run.summary ?? (
-                    <span className="text-muted-foreground">-</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={columns}
+        data={runs}
+        getRowId={(run) => run.id}
+        loading={loading}
+        emptyTitle="暂无 Agent 运行"
+        emptyDescription="打开「Agent 自动回复」后，外部成员发言就会触发一次运行。"
+        rowClassName={(run) =>
+          cn({
+            "bg-destructive/8 hover:bg-destructive/12":
+              run.status === "blocked",
+            "shadow-[inset_3px_0_0_var(--primary)]": run.id === activeRunId,
+          })
+        }
+        initialHiddenColumns={["accumulatedMs"]}
+        testId="agent-run-list"
+      />
     </div>
   );
 }

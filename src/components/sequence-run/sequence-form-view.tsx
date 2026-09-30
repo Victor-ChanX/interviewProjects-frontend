@@ -9,12 +9,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { cn } from "@/lib/utils";
 
 import type { SequenceFormViewProps } from "./types";
-
-const CONTROL_CLASS =
-  "w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 const HIGHLIGHT_ROW_CLASS =
   "rounded-md bg-destructive/10 ring-1 ring-destructive";
@@ -64,30 +65,30 @@ export function SequenceFormView({
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="sequence-id">序列</Label>
-        <select
+        <NativeSelect
           id="sequence-id"
-          className={cn(CONTROL_CLASS, "h-9")}
+          className="w-full sm:max-w-md"
           disabled={disabled || sequencesLoading}
           aria-invalid={errors.sequenceId ? true : undefined}
           value={selectedSequenceId}
           {...register("sequenceId")}
         >
-          <option value="">
+          <NativeSelectOption value="">
             {sequencesLoading
               ? "加载序列中…"
               : noSequence
-                ? "还没有序列，先在下方新建"
+                ? "还没有序列，先到「定时序列」页新建"
                 : "请选择"}
-          </option>
+          </NativeSelectOption>
           {sequences.map((sequence) => (
-            <option key={sequence.id} value={sequence.id}>
+            <NativeSelectOption key={sequence.id} value={sequence.id}>
               {sequence.name}（{sequence.steps.length} 步）
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
         <FieldError message={errors.sequenceId?.message} />
         {hasSelection ? (
-          <ol className="mt-1 flex flex-col gap-1 text-xs text-muted-foreground">
+          <ol className="mt-1 flex flex-col gap-1 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
             {selectedSteps.map((step) => (
               <li key={step.index} className="flex gap-2">
                 <span className="shrink-0 tabular-nums">#{step.index}</span>
@@ -212,18 +213,20 @@ export function SequenceFormView({
               )}
             >
               <div className="flex flex-col gap-1">
-                <select
+                <NativeSelect
                   aria-label={`stepVars 第 ${i + 1} 行的步骤`}
-                  className={cn(CONTROL_CLASS, "h-9 w-auto")}
                   aria-invalid={rowError?.stepIndex ? true : undefined}
                   {...register(`stepVars.${i}.stepIndex`)}
                 >
                   {selectedSteps.map((step) => (
-                    <option key={step.index} value={String(step.index)}>
+                    <NativeSelectOption
+                      key={step.index}
+                      value={String(step.index)}
+                    >
                       第 {step.index} 步
-                    </option>
+                    </NativeSelectOption>
                   ))}
-                </select>
+                </NativeSelect>
                 <FieldError message={rowError?.stepIndex?.message} />
               </div>
               <div className="flex flex-col gap-1">
@@ -257,7 +260,6 @@ export function SequenceFormView({
 
       <Button
         type="submit"
-        size="sm"
         className="self-end"
         disabled={disabled || noSequence}
       >

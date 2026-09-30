@@ -1,5 +1,8 @@
+import type { FilterTabOption } from "@/components/ui-atoms/filter-tabs";
 import type { AccountAction } from "@/lib/account-transitions";
 import type { AccountStatus } from "@/services/account-service";
+
+import type { AccountTab } from "./account-filters";
 
 /** 题目第 4 节页面 2 的三个按钮文案（hook 的 toast 与 view 的按钮共用）。 */
 export const ACCOUNT_ACTION_LABELS: Readonly<Record<AccountAction, string>> = {
@@ -22,7 +25,13 @@ export interface AccountRow {
 }
 
 export interface AccountListViewProps {
+  /** 当前页签下的行。 */
   rows: AccountRow[];
+  /** 全部账号数（页签之前）。 */
+  total: number;
+  tab: AccountTab;
+  tabs: FilterTabOption<AccountTab>[];
+  onTabChange: (tab: AccountTab) => void;
   loading: boolean;
   error: unknown;
   retrying: boolean;

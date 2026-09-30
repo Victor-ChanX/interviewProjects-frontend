@@ -2,11 +2,13 @@
 // 选项是 { value, label }：显示 label，值是 value（Combobox.createItems），按 label 或 value 都能搜到。
 // 选项较多（模型列表动辄几十个）时比原生 <select> 好用；值只能是列表里的一项，不接受自由输入。
 // 受控：value 为空串表示未选；清空也回调空串。
+// 回车不冒泡成表单提交：没有高亮选项时，输入框里的回车原本会触发整张表单的隐式提交（前端 #12 修复）。
 
 import { Combobox } from "@base-ui/react/combobox";
 import { Check, ChevronDown, X } from "lucide-react";
 import { useMemo } from "react";
 
+import { preventEnterSubmit } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
 
 export interface SearchableSelectOption {
@@ -68,9 +70,11 @@ export function SearchableSelect({
       disabled={disabled}
     >
       <Combobox.InputGroup
+        // 冒泡阶段拦：Combobox 自己在输入框上的回车（选中高亮项）已先处理完，这里只拦浏览器的默认提交。
+        onKeyDown={preventEnterSubmit}
         className={cn(
-          "relative flex h-9 w-full items-center rounded-md border border-input bg-background text-sm shadow-xs transition-[color,box-shadow]",
-          "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50",
+          "relative flex h-8 w-full items-center rounded-lg border border-input bg-transparent text-sm transition-[color,box-shadow] dark:bg-input/30",
+          "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
           {
             "border-destructive ring-destructive/20": invalid,
             "cursor-not-allowed opacity-50": disabled,
@@ -82,7 +86,7 @@ export function SearchableSelect({
           id={id}
           placeholder={placeholder}
           aria-invalid={invalid ? true : undefined}
-          className="h-full min-w-0 flex-1 bg-transparent px-3 outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+          className="h-full min-w-0 flex-1 bg-transparent px-2.5 outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
         />
         <div className="flex h-full items-center pr-1 text-muted-foreground">
           {clearable && value ? (
@@ -104,7 +108,7 @@ export function SearchableSelect({
 
       <Combobox.Portal>
         <Combobox.Positioner className="z-50 outline-none" sideOffset={4}>
-          <Combobox.Popup className="w-[var(--anchor-width)] max-w-[var(--available-width)] rounded-md border border-border bg-card text-card-foreground shadow-md transition-opacity duration-100 data-ending-style:opacity-0 data-starting-style:opacity-0">
+          <Combobox.Popup className="w-[var(--anchor-width)] max-w-[var(--available-width)] rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 transition-opacity duration-100 data-ending-style:opacity-0 data-starting-style:opacity-0">
             <Combobox.Empty>
               <div className="px-3 py-2 text-sm text-muted-foreground">
                 {emptyText}

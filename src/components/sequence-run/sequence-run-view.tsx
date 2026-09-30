@@ -1,11 +1,10 @@
-// 序列运行页的布局：纯展示，props 进回调出。头部（回群详情 / 实时角标）+ 进度卡（有 run 时）+ 启动表单卡
-// + 新建序列的折叠卡（admin）+ 预检弹窗。不 fetch、不 toast、不做路由，不知道有实时连接。
-// 「新建序列」的展开 / 收起是纯视觉 state，留在 view。
+// 序列运行页的布局：纯展示，props 进回调出。标题行（群名 / 回群详情 / 去定时序列）+ 进度卡（有 run 时）
+// + 启动表单卡（admin）+ 预检弹窗。不 fetch、不 toast、不做路由，不知道有实时连接。
 
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, ListOrdered } from "lucide-react";
 import { Link } from "react-router";
 
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -13,11 +12,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/ui-atoms/page-header";
 import { QueryError } from "@/components/ui-atoms/query-error";
 import { getErrorMessage } from "@/lib/get-error-message";
-import { cn } from "@/lib/utils";
 
-import { CreateSequenceFormView } from "./create-sequence-form-view";
 import { PreflightDialogView } from "./preflight-dialog-view";
 import { SequenceFormView } from "./sequence-form-view";
 import { SequenceRunProgressView } from "./sequence-run-progress-view";
@@ -25,7 +24,7 @@ import type { SequenceRunViewProps } from "./types";
 
 export function SequenceRunView({
   groupId,
-  connection,
+  groupName,
   groupLoading,
   groupError,
   groupRetrying,
@@ -33,10 +32,7 @@ export function SequenceRunView({
   form,
   preflight,
   progress,
-  createForm,
 }: SequenceRunViewProps) {
-  const [createOpen, setCreateOpen] = useState(false);
-
   if (groupError)
     return (
       <QueryError
@@ -49,31 +45,44 @@ export function SequenceRunView({
 
   if (groupLoading)
     return (
-      <div className="flex flex-col gap-4">
-        <div className="h-16 animate-pulse rounded-md bg-muted" />
-        <div className="h-64 animate-pulse rounded-md bg-muted" />
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-12 w-72" />
+        <Skeleton className="h-80 w-full rounded-xl" />
       </div>
     );
 
   return (
-    <section className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-center gap-2">
-        <Link
-          to={`/groups/${encodeURIComponent(groupId)}`}
-          className="text-sm text-muted-foreground hover:underline"
-        >
-          ← 群 {groupId}
-        </Link>
-        <h1 className="text-lg font-semibold">序列运行</h1>
-        <span
-          className={cn("text-xs", {
-            "text-success": connection === "open",
-            "text-muted-foreground": connection !== "open",
-          })}
-        >
-          {connection === "open" ? "实时" : "离线"}
-        </span>
-      </header>
+    <>
+      <PageHeader
+        title="序列运行"
+        description={
+          <>
+            在群 <span className="font-mono">{groupName}</span>{" "}
+            里按步骤发言：选序列、填占位符取值 → 预检每步每个 key
+            的最终取值与来源 → 启动，进度实时更新。
+          </>
+        }
+        actions={
+          <>
+            <Button
+              variant="outline"
+              render={<Link to={`/groups/${encodeURIComponent(groupId)}`} />}
+              nativeButton={false}
+            >
+              <ArrowLeft />
+              回到群详情
+            </Button>
+            <Button
+              variant="outline"
+              render={<Link to="/sequences" />}
+              nativeButton={false}
+            >
+              <ListOrdered />
+              定时序列
+            </Button>
+          </>
+        }
+      />
 
       {progress ? (
         <Card>
@@ -94,8 +103,8 @@ export function SequenceRunView({
           <CardHeader>
             <CardTitle>启动序列</CardTitle>
             <CardDescription>
-              选序列、填 vars 与 stepVars → 预检（每步每个 key
-              的最终取值与来源）→ 启动
+              还没有合适的序列？先到「定时序列」页新建。vars
+              是起始取值，stepVars 从某一步起覆盖。
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -103,40 +112,12 @@ export function SequenceRunView({
           </CardContent>
         </Card>
       ) : (
-        <p className="text-sm text-muted-foreground">
+        <p className="rounded-lg border border-dashed border-border bg-card px-4 py-3 text-sm text-muted-foreground">
           只读账号：只能查看运行进度，不能启动序列。
         </p>
       )}
 
-      {createForm ? (
-        <Card>
-          <CardHeader>
-            <button
-              type="button"
-              className="flex items-center gap-1 text-left"
-              aria-expanded={createOpen}
-              onClick={() => setCreateOpen((open) => !open)}
-            >
-              {createOpen ? (
-                <ChevronDown className="size-4" />
-              ) : (
-                <ChevronRight className="size-4" />
-              )}
-              <CardTitle>新建序列</CardTitle>
-            </button>
-            <CardDescription>
-              题目 B1 的序列 JSON：name + steps（accountRole / text /
-              delaySeconds），文本里用 {"{key}"} 占位
-            </CardDescription>
-          </CardHeader>
-          {/* 收起用 hidden 不用条件渲染：折叠时不卸载表单，填了一半的步骤不会丢。 */}
-          <CardContent className={cn({ hidden: !createOpen })}>
-            <CreateSequenceFormView {...createForm} />
-          </CardContent>
-        </Card>
-      ) : null}
-
       <PreflightDialogView {...preflight} />
-    </section>
+    </>
   );
 }

@@ -16,7 +16,7 @@ export const DIALOG_SHELL = "flex max-h-[85dvh] flex-col";
 
 /**
  * 唯一允许滚动的那一段。`min-h-0` 不能省（flex 子项默认 min-height:auto 拒绝收缩，overflow 失效）；
- * 不加 `flex-1`（内容装得下时也会多出滚动区）；`-mx-6 px-6` 抵消 DialogContent 的 p-6，让滚动条贴边；
+ * 不加 `flex-1`（内容装得下时也会多出滚动区）；`-mx-4 px-4` 抵消 DialogContent 的 p-4（shadcn base-nova），让滚动条贴边；
  * `pb-2 -mb-2` 给行盒溢出的几像素余量，免得冒出一条没有内容可滚的假滚动条。
  */
 export function DialogBody({
@@ -29,7 +29,28 @@ export function DialogBody({
   return (
     <div
       data-slot="dialog-body"
-      className={cn("-mx-6 -mb-2 min-h-0 overflow-y-auto px-6 pb-2", className)}
+      className={cn("-mx-4 -mb-2 min-h-0 overflow-y-auto px-4 pb-2", className)}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * 侧边抽屉（SheetContent，整屏高的 flex 列）的滚动段：header / footer 各自 p-4 留在外面，只有这一段滚。
+ * 这里要 `flex-1`：抽屉本身就是满高的，body 撑满剩余空间，footer 才会贴底。
+ */
+export function SheetBody({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      data-slot="sheet-body"
+      className={cn("min-h-0 flex-1 overflow-y-auto px-4 pb-2", className)}
     >
       {children}
     </div>

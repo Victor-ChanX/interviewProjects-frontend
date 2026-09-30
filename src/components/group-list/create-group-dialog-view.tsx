@@ -7,6 +7,7 @@ import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogClose,
@@ -17,6 +18,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { DIALOG_SHELL, DialogBody } from "@/components/ui-atoms/dialog-shell";
 import { JobProgress } from "@/components/ui-atoms/job-progress";
 import { cn } from "@/lib/utils";
@@ -27,9 +32,6 @@ import type {
 } from "./types";
 
 const FORM_ID = "create-group-form";
-
-const CONTROL_CLASS =
-  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 function accountLabel(account: CreateGroupAccountOption): string {
   return account.platformUserId
@@ -89,27 +91,27 @@ export function CreateGroupDialogView({
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="create-group-creator">群主</Label>
-                <select
+                <NativeSelect
                   id="create-group-creator"
-                  className={CONTROL_CLASS}
+                  className="w-full"
                   value={creatorAccountId}
                   disabled={accountsLoading || submitting}
                   aria-invalid={errors.creatorAccountId ? true : undefined}
                   onChange={(event) => onCreatorChange(event.target.value)}
                 >
-                  <option value="">
+                  <NativeSelectOption value="">
                     {accountsLoading
                       ? "加载账号中…"
                       : noAccount
                         ? "没有在线账号"
                         : "请选择"}
-                  </option>
+                  </NativeSelectOption>
                   {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
+                    <NativeSelectOption key={account.id} value={account.id}>
                       {accountLabel(account)}
-                    </option>
+                    </NativeSelectOption>
                   ))}
-                </select>
+                </NativeSelect>
                 {errors.creatorAccountId ? (
                   <p className="text-xs text-destructive">
                     {errors.creatorAccountId}
@@ -129,7 +131,7 @@ export function CreateGroupDialogView({
                       : "没有可选的在线账号（群主不能同时是成员）"}
                   </p>
                 ) : (
-                  <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
+                  <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
                     {candidates.map((account) => {
                       const order = memberAccountIds.indexOf(account.id);
                       const inputId = `create-group-member-${account.id}`;
@@ -138,21 +140,22 @@ export function CreateGroupDialogView({
                         <li key={account.id}>
                           <label
                             htmlFor={inputId}
-                            className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-accent/50"
+                            className="flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm hover:bg-muted"
                           >
-                            <input
+                            <Checkbox
                               id={inputId}
-                              type="checkbox"
-                              className="size-4 accent-primary"
                               checked={order !== -1}
                               disabled={submitting}
-                              onChange={() => onToggleMember(account.id)}
+                              onCheckedChange={() => onToggleMember(account.id)}
                             />
                             <span className="min-w-0 flex-1 truncate">
                               {accountLabel(account)}
                             </span>
                             {order !== -1 ? (
-                              <Badge variant="outline" className="tabular-nums">
+                              <Badge
+                                variant={order === 0 ? "default" : "secondary"}
+                                className="tabular-nums"
+                              >
                                 #{order + 1}
                                 {order === 0 ? " 管理员" : null}
                               </Badge>
@@ -181,20 +184,18 @@ export function CreateGroupDialogView({
         </DialogBody>
 
         <DialogFooter>
-          {/* Button 渲染成 DialogClose：ui/button 没有 forwardRef，反过来写 Base UI 会往 Button 上挂 ref 而告警。 */}
           {progress ? (
-            <Button variant="outline" render={<DialogClose />}>
+            <DialogClose render={<Button variant="outline" />}>
               {progress.running ? "后台运行" : "关闭"}
-            </Button>
+            </DialogClose>
           ) : (
             <>
-              <Button
-                variant="outline"
-                render={<DialogClose />}
+              <DialogClose
+                render={<Button variant="outline" />}
                 disabled={submitting}
               >
                 取消
-              </Button>
+              </DialogClose>
               <Button
                 type="submit"
                 form={FORM_ID}

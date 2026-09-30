@@ -1,14 +1,16 @@
 // 受保护区域的会话编排：登录态、加载时的静默续期（checking）、401 → 登录页（注入请求层的
-// onAuthError）、退出、实时连接生命周期。只在受保护布局（src/app/layout.tsx → app-shell-container）里用一次。
+// onAuthError）、退出、实时连接生命周期；以及布局要的路由派生（当前菜单项、面包屑、标签页标题）。
+// 只在受保护布局（src/app/layout.tsx → app-shell-container）里用一次。
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 import { useRealtimeConnection, useRealtimeStatus } from "@/hooks/use-realtime";
 import { useSession } from "@/hooks/use-session";
 import { clearSession } from "@/lib/auth";
 import { buildLoginRedirect, LOGIN_PATH } from "@/lib/login-redirect";
+import { buildBreadcrumbs, documentTitle, findNavItem } from "@/lib/nav";
 import { configureRequest, refreshAccessToken } from "@/lib/request";
 import { disconnectRealtime } from "@/lib/ws";
 import { logout } from "@/services/auth-service";
@@ -70,6 +72,15 @@ export function useAppShell() {
     };
   }, [navigate]);
 
+  // 菜单高亮与面包屑都按路由派生；浏览器标签页标题跟着当前页走。
+  const { pathname } = location;
+  const breadcrumbs = useMemo(() => buildBreadcrumbs(pathname), [pathname]);
+  const activeKey = findNavItem(pathname)?.item.key ?? null;
+
+  useEffect(() => {
+    document.title = documentTitle(pathname);
+  }, [pathname]);
+
   // 登录态就绪才建连；退出 / 401 清会话后断开（#4 的 useRealtimeConnection 自己读 useSession）。
   useRealtimeConnection();
 
@@ -89,5 +100,13 @@ export function useAppShell() {
       });
   }, [navigate, queryClient]);
 
-  return { session, checking, connection, loginRedirect, onLogout };
+  return {
+    session,
+    checking,
+    connection,
+    loginRedirect,
+    onLogout,
+    breadcrumbs,
+    activeKey,
+  };
 }

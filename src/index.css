@@ -1,54 +1,173 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-/* shadcn 主题 token（最小集）：组件只用 bg-background / text-foreground 这类语义色。 */
+/*
+ * shadcn（base-nova，底层 Base UI）主题。组件只用语义 token（bg-background / text-muted-foreground / bg-sidebar …），
+ * 不写死颜色。
+ * 主色是一种沉稳的蓝；内容区底色是浅灰蓝、卡片是白，靠两层底色把「工作台」与「卡片」分开。
+ * success / warning 是业务状态色（在线 / 通过、限流 / 待处理），和 destructive 一起给徽标与提示用。
+ */
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * 下面这组 custom-variant 来自 shadcn CLI 初始化时引入的 `shadcn/tailwind.css`：base-nova 的原语用
+ * data-open: / data-checked: 这类变体同时兼容 Radix（data-state="open"）与 Base UI（data-open）。
+ * 只内联原语真正用到的那几个，不为一份 CSS 把整个 shadcn CLI 包装进依赖。
+ */
+@custom-variant data-open {
+  &:where([data-state="open"]),
+  &:where([data-open]:not([data-open="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-closed {
+  &:where([data-state="closed"]),
+  &:where([data-closed]:not([data-closed="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-checked {
+  &:where([data-state="checked"]),
+  &:where([data-checked]:not([data-checked="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-unchecked {
+  &:where([data-state="unchecked"]),
+  &:where([data-unchecked]:not([data-unchecked="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-selected {
+  &:where([data-selected="true"]) {
+    @slot;
+  }
+}
+
+@custom-variant data-disabled {
+  &:where([data-disabled="true"]),
+  &:where([data-disabled]:not([data-disabled="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-active {
+  &:where([data-state="active"]),
+  &:where([data-active]:not([data-active="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-horizontal {
+  &:where([data-orientation="horizontal"]) {
+    @slot;
+  }
+}
+
+@custom-variant data-vertical {
+  &:where([data-orientation="vertical"]) {
+    @slot;
+  }
+}
+
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --radius: 0.625rem;
+  --background: oklch(0.975 0.005 255);
+  --foreground: oklch(0.21 0.02 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  /* 语义状态色：success = 在线 / 通过，warning = 限流 / 待处理 */
-  --success: oklch(0.627 0.194 149.214);
-  --warning: oklch(0.769 0.188 70.08);
+  --card-foreground: oklch(0.21 0.02 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.02 260);
+  --primary: oklch(0.5 0.17 258);
+  --primary-foreground: oklch(0.985 0.005 255);
+  --secondary: oklch(0.955 0.012 255);
+  --secondary-foreground: oklch(0.3 0.04 260);
+  --muted: oklch(0.955 0.008 255);
+  --muted-foreground: oklch(0.52 0.025 258);
+  --accent: oklch(0.945 0.022 255);
+  --accent-foreground: oklch(0.36 0.12 258);
+  --destructive: oklch(0.577 0.215 27.3);
+  --border: oklch(0.915 0.01 255);
+  --input: oklch(0.89 0.012 255);
+  --ring: oklch(0.62 0.13 258);
+  --success: oklch(0.6 0.15 152);
+  --warning: oklch(0.68 0.16 65);
+  --chart-1: oklch(0.5 0.17 258);
+  --chart-2: oklch(0.6 0.15 152);
+  --chart-3: oklch(0.68 0.16 65);
+  --chart-4: oklch(0.577 0.215 27.3);
+  --chart-5: oklch(0.55 0.12 300);
+  --sidebar: oklch(0.99 0.003 255);
+  --sidebar-foreground: oklch(0.3 0.03 260);
+  --sidebar-primary: oklch(0.5 0.17 258);
+  --sidebar-primary-foreground: oklch(0.985 0.005 255);
+  --sidebar-accent: oklch(0.945 0.028 255);
+  --sidebar-accent-foreground: oklch(0.42 0.16 258);
+  --sidebar-border: oklch(0.915 0.01 255);
+  --sidebar-ring: oklch(0.62 0.13 258);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
+  --background: oklch(0.17 0.015 260);
+  --foreground: oklch(0.96 0.005 255);
+  --card: oklch(0.21 0.018 260);
+  --card-foreground: oklch(0.96 0.005 255);
+  --popover: oklch(0.23 0.02 260);
+  --popover-foreground: oklch(0.96 0.005 255);
+  --primary: oklch(0.66 0.15 258);
+  --primary-foreground: oklch(0.17 0.02 260);
+  --secondary: oklch(0.27 0.02 260);
+  --secondary-foreground: oklch(0.96 0.005 255);
+  --muted: oklch(0.26 0.018 260);
+  --muted-foreground: oklch(0.7 0.02 258);
+  --accent: oklch(0.29 0.04 258);
+  --accent-foreground: oklch(0.92 0.03 255);
+  --destructive: oklch(0.704 0.191 22.2);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --success: oklch(0.723 0.219 149.579);
-  --warning: oklch(0.828 0.189 84.429);
+  --ring: oklch(0.6 0.12 258);
+  --success: oklch(0.72 0.17 152);
+  --warning: oklch(0.8 0.15 75);
+  --chart-1: oklch(0.66 0.15 258);
+  --chart-2: oklch(0.72 0.17 152);
+  --chart-3: oklch(0.8 0.15 75);
+  --chart-4: oklch(0.704 0.191 22.2);
+  --chart-5: oklch(0.7 0.12 300);
+  --sidebar: oklch(0.2 0.018 260);
+  --sidebar-foreground: oklch(0.9 0.01 255);
+  --sidebar-primary: oklch(0.66 0.15 258);
+  --sidebar-primary-foreground: oklch(0.17 0.02 260);
+  --sidebar-accent: oklch(0.28 0.04 258);
+  --sidebar-accent-foreground: oklch(0.95 0.01 255);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.6 0.12 258);
 }
 
 @theme inline {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-heading: var(--font-sans);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
@@ -63,13 +182,60 @@
   --color-ring: var(--ring);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
+  html {
+    @apply font-sans;
   }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  /*
+   * 交互元素的默认颜色过渡（frontend-component-splitting「交互动画」第 7 条）：逐个组件补 transition 一定会漏，
+   * 在 base 层给一条，组件自己的 transition-* 能盖掉它。
+   */
+  button,
+  a[href],
+  label,
+  [role="button"],
+  [role="option"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="radio"],
+  [role="checkbox"] {
+    transition-property: color, background-color, border-color, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+}
+
+/* 弹出菜单的进出场统一放慢一点（tw-animate-css 读 --tw-animation-duration，shadcn 写死 duration-100）。 */
+[data-slot="dropdown-menu-content"],
+[data-slot="select-content"],
+[data-slot="tooltip-content"] {
+  --tw-animation-duration: 150ms;
 }

@@ -1,185 +1,235 @@
-// 步骤表：纯展示。index / kind / 工具名 / 入参（JSON 摘要，可展开）/ 结果摘要 / 审计结论 / 错误码；
-// 协议错误步多一个「查看原始响应」按钮（浮层由父层管）。展开集合是轻量纯视觉 state，留在 view。
-// 原生 <table>：共享 DataTable 尚未落地（与 group-detail 的 run 列表同口径）。
+// 步骤表：DataTable（# / 类型 / 工具名 / 入参 / 结果摘要 / 审计结论 / 错误码）。每行可展开看完整入参 JSON；
+// 协议错误步展开后还有 Agent 服务返回的原始响应体（后端截到 2KB）。展开集合是轻量纯视觉 state，留在 view。
 
-import { ChevronDown, ChevronRight, FileCode } from "lucide-react";
-import { useState } from "react";
+import { ChevronRight, FileCode } from "lucide-react";
+import { useMemo, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui-atoms/data-table";
+import { dataTableColumnHelper } from "@/components/ui-atoms/data-table-columns";
+import { StatusBadge } from "@/components/ui-atoms/status-badge";
 import {
   AGENT_STEP_KIND_LABELS,
+  AGENT_STEP_KIND_TONE,
   AUDIT_VERDICT_CLASS,
   AUDIT_VERDICT_LABELS,
 } from "@/lib/agent-run-labels";
 import { cn } from "@/lib/utils";
-import type { AgentStepKind } from "@/services/agent-run-service";
+import type { AgentStepRead } from "@/services/agent-run-service";
 
 import { formatJson, summarizeJson } from "./step-json";
 import type { AgentStepTableViewProps } from "./types";
 
-/** kind → 徽标样式，走主题 token；协议错误步醒目。 */
-const KIND_CLASS: Readonly<Record<AgentStepKind, string>> = {
-  tool_use: "border-border bg-muted text-foreground",
-  final: "border-success/40 bg-success/15 text-success",
-  protocol_error: "border-destructive/40 bg-destructive/15 text-destructive",
-};
-
-const HEADERS = [
-  "#",
-  "kind",
-  "工具名",
-  "入参",
-  "结果摘要",
-  "审计结论",
-  "错误码",
-  "",
-] as const;
+const col = dataTableColumnHelper<AgentStepRead>();
 
 const Dash = () => <span className="text-muted-foreground">-</span>;
 
-export function AgentStepTableView({
-  steps,
-  onViewRawResponse,
-}: AgentStepTableViewProps) {
+function hasDetail(step: AgentStepRead): boolean {
+  return step.input !== null || step.rawResponse !== null;
+}
+
+function buildColumns(
+  expanded: ReadonlySet<number>,
+  toggle: (index: number) => void,
+) {
+  return col.columns([
+    col.display({
+      id: "expand",
+      header: () => <span className="sr-only">展开</span>,
+      meta: { className: "w-8 pr-0" },
+      cell: ({ row }) =>
+        hasDetail(row.original) ? (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={expanded.has(row.original.index) ? "收起" : "展开"}
+            aria-expanded={expanded.has(row.original.index)}
+            onClick={() => toggle(row.original.index)}
+          >
+            <ChevronRight
+              className={cn("transition-transform", {
+                "rotate-90": expanded.has(row.original.index),
+              })}
+            />
+          </Button>
+        ) : null,
+    }),
+    col.accessor("index", {
+      header: "#",
+      meta: { className: "w-10 tabular-nums" },
+    }),
+    col.accessor("kind", {
+      header: "类型",
+      meta: { label: "类型", className: "w-24" },
+      cell: ({ row }) => (
+        <StatusBadge tone={AGENT_STEP_KIND_TONE[row.original.kind]} dot={false}>
+          {AGENT_STEP_KIND_LABELS[row.original.kind]}
+        </StatusBadge>
+      ),
+    }),
+    col.accessor("name", {
+      header: "工具名",
+      meta: { label: "工具名", className: "w-44" },
+      cell: ({ row }) =>
+        row.original.name ? (
+          <span className="font-mono text-xs">{row.original.name}</span>
+        ) : (
+          <Dash />
+        ),
+    }),
+    col.accessor("input", {
+      header: "入参",
+      meta: { label: "入参", className: "max-w-60" },
+      cell: ({ row }) =>
+        row.original.input ? (
+          <span
+            className="block truncate font-mono text-xs text-muted-foreground"
+            title={summarizeJson(row.original.input, 400)}
+          >
+            {summarizeJson(row.original.input)}
+          </span>
+        ) : (
+          <Dash />
+        ),
+    }),
+    col.accessor("resultSummary", {
+      header: "结果摘要",
+      meta: { label: "结果摘要", className: "max-w-72 whitespace-normal" },
+      cell: ({ row }) =>
+        row.original.resultSummary ? (
+          <span
+            className="line-clamp-2 break-words"
+            title={row.original.resultSummary}
+          >
+            {row.original.resultSummary}
+          </span>
+        ) : (
+          <Dash />
+        ),
+    }),
+    col.accessor("auditVerdict", {
+      header: "审计结论",
+      meta: { label: "审计结论", className: "w-28" },
+      cell: ({ row }) => {
+        const step = row.original;
+
+        if (step.auditVerdict)
+          return (
+            <span
+              className={cn(
+                "font-medium",
+                AUDIT_VERDICT_CLASS[step.auditVerdict],
+              )}
+            >
+              {AUDIT_VERDICT_LABELS[step.auditVerdict]}
+              {step.auditAttempts > 1 ? `（${step.auditAttempts} 次）` : null}
+            </span>
+          );
+
+        return step.auditAttempts > 0 ? (
+          <span className="text-destructive">
+            无结论（{step.auditAttempts} 次）
+          </span>
+        ) : (
+          <Dash />
+        );
+      },
+    }),
+    col.accessor("errorCode", {
+      header: "错误码",
+      meta: { label: "错误码", className: "w-36" },
+      cell: ({ row }) =>
+        row.original.errorCode ? (
+          <span className="font-mono text-xs text-destructive">
+            {row.original.errorCode}
+          </span>
+        ) : (
+          <Dash />
+        ),
+    }),
+    col.display({
+      id: "raw",
+      header: () => <span className="sr-only">原始响应</span>,
+      meta: { className: "w-32 text-right" },
+      cell: ({ row }) =>
+        row.original.kind === "protocol_error" ? (
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => toggle(row.original.index)}
+          >
+            <FileCode />
+            {expanded.has(row.original.index) ? "收起原始响应" : "查看原始响应"}
+          </Button>
+        ) : null,
+    }),
+  ]);
+}
+
+function StepDetail({ step }: { step: AgentStepRead }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      {step.input !== null ? (
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            入参（完整 JSON）
+          </span>
+          <pre className="max-h-64 overflow-auto rounded-lg bg-card p-3 font-mono text-xs whitespace-pre-wrap break-all ring-1 ring-border">
+            {formatJson(step.input)}
+          </pre>
+        </div>
+      ) : null}
+      {step.rawResponse !== null ? (
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-xs font-medium text-destructive">
+            原始响应体{step.errorCode ? `（${step.errorCode}）` : null}：Agent
+            服务返回的原文，超过 2KB 的部分已被截断
+          </span>
+          <pre
+            className="max-h-64 overflow-auto rounded-lg bg-card p-3 font-mono text-xs whitespace-pre-wrap break-all ring-1 ring-destructive/30"
+            data-testid="raw-response"
+          >
+            {step.rawResponse}
+          </pre>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function AgentStepTableView({ steps }: AgentStepTableViewProps) {
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(
     () => new Set(),
   );
 
-  if (steps.length === 0)
-    return <p className="text-sm text-muted-foreground">还没有步骤</p>;
+  const columns = useMemo(() => {
+    const toggle = (index: number) =>
+      setExpanded((prev) => {
+        const next = new Set(prev);
 
-  const toggle = (index: number) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
+        if (next.has(index)) next.delete(index);
+        else next.add(index);
 
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
+        return next;
+      });
 
-      return next;
-    });
+    return buildColumns(expanded, toggle);
+  }, [expanded]);
 
   return (
-    <div className="overflow-x-auto rounded-md border border-border">
-      <table className="w-full text-sm" data-testid="agent-step-table">
-        <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-          <tr>
-            {HEADERS.map((header, i) => (
-              <th key={i} className="px-3 py-2 font-medium">
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {steps.map((step) => {
-            const isOpen = expanded.has(step.index);
-            const hasInput = step.input !== null;
-
-            return (
-              <tr
-                key={step.index}
-                className={cn("align-top", {
-                  "bg-destructive/5": step.isError,
-                })}
-              >
-                <td className="px-3 py-2 tabular-nums">{step.index}</td>
-                <td className="px-3 py-2">
-                  <Badge
-                    variant="outline"
-                    className={cn("font-medium", KIND_CLASS[step.kind])}
-                  >
-                    {AGENT_STEP_KIND_LABELS[step.kind]}
-                  </Badge>
-                </td>
-                <td className="px-3 py-2 font-mono text-xs">
-                  {step.name ?? <Dash />}
-                </td>
-                <td className="max-w-md px-3 py-2">
-                  {hasInput ? (
-                    <div className="flex flex-col gap-1">
-                      <button
-                        type="button"
-                        className="flex items-start gap-1 text-left font-mono text-xs hover:underline"
-                        aria-expanded={isOpen}
-                        onClick={() => toggle(step.index)}
-                      >
-                        {isOpen ? (
-                          <ChevronDown className="mt-0.5 size-3 shrink-0" />
-                        ) : (
-                          <ChevronRight className="mt-0.5 size-3 shrink-0" />
-                        )}
-                        <span className="break-all">
-                          {isOpen ? "收起" : summarizeJson(step.input)}
-                        </span>
-                      </button>
-                      {isOpen ? (
-                        <pre className="max-h-64 overflow-auto rounded-md bg-muted p-2 font-mono text-xs whitespace-pre-wrap break-all">
-                          {formatJson(step.input)}
-                        </pre>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <Dash />
-                  )}
-                </td>
-                <td
-                  className="max-w-xs px-3 py-2"
-                  title={step.resultSummary ?? undefined}
-                >
-                  {step.resultSummary ? (
-                    <span className="line-clamp-3 break-words">
-                      {step.resultSummary}
-                    </span>
-                  ) : (
-                    <Dash />
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  {step.auditVerdict ? (
-                    <span
-                      className={cn(
-                        "font-medium",
-                        AUDIT_VERDICT_CLASS[step.auditVerdict],
-                      )}
-                    >
-                      {AUDIT_VERDICT_LABELS[step.auditVerdict]}
-                      {step.auditAttempts > 1
-                        ? `（${step.auditAttempts} 次）`
-                        : null}
-                    </span>
-                  ) : step.auditAttempts > 0 ? (
-                    <span className="text-muted-foreground">
-                      无结论（{step.auditAttempts} 次）
-                    </span>
-                  ) : (
-                    <Dash />
-                  )}
-                </td>
-                <td className="px-3 py-2 font-mono text-xs">
-                  {step.errorCode ? (
-                    <span className="text-destructive">{step.errorCode}</span>
-                  ) : (
-                    <Dash />
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  {step.kind === "protocol_error" ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onViewRawResponse(step)}
-                    >
-                      <FileCode className="size-3.5" />
-                      查看原始响应
-                    </Button>
-                  ) : null}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={columns}
+      data={steps}
+      getRowId={(step) => String(step.index)}
+      emptyTitle="还没有步骤"
+      emptyDescription="运行开始后，每一轮工具调用都会出现在这里。"
+      rowClassName={(step) =>
+        step.isError ? "bg-destructive/5 hover:bg-destructive/10" : undefined
+      }
+      renderSubRow={(step) =>
+        expanded.has(step.index) ? <StepDetail step={step} /> : null
+      }
+      testId="agent-step-table"
+    />
   );
 }

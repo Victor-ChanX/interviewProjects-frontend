@@ -2,11 +2,11 @@ import type { FormEvent } from "react";
 import type { FieldErrors, UseFormRegister } from "react-hook-form";
 
 import type { JobProgressProps } from "@/components/ui-atoms/job-progress";
-import type { ConnectionStatus } from "@/lib/ws";
 import type { AgentRunRead } from "@/services/agent-run-service";
 import type { GroupMemberRead, GroupRead } from "@/services/group-service";
 import type { MessageRead } from "@/services/message-service";
 
+import type { GroupTab } from "./group-tabs";
 import type { SendMessageFormValues } from "./send-message-schema";
 
 /** 群的两个可切换开关（PATCH /api/groups/:id 的键）。 */
@@ -74,7 +74,8 @@ export interface GroupDetailViewProps {
   error: unknown;
   retrying: boolean;
   onRetry: () => void;
-  connection: ConnectionStatus;
+  tab: GroupTab;
+  onTabChange: (tab: GroupTab) => void;
   /** admin 才显示开关与发消息表单（viewer 写操作 403）。 */
   canWrite: boolean;
   /** 正在保存的开关；null 表示空闲。 */

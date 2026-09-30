@@ -1,4 +1,5 @@
-// 端到端（前端 #8，题目 C3）：登录 → 群列表 → 群详情（成员 + agent run 列表）→ run 详情看到每一步。
+// 端到端（前端 #8，题目 C3；前端 #12 改版后同步）：登录 → 工作台 → 左侧菜单进群组管理 → 群详情
+// （成员页签 + Agent 运行页签）→ run 详情看到每一步。
 //
 // 数据不经 UI 造：beforeAll 用 Playwright 的 request 直接调后端 API 与模拟器管理端点 ——
 // 连 acc-1 / acc-2 → 建群（轮询 job 到 finished）→ 开 agentEnabled → 网关推一条外部用户消息触发 run
@@ -210,19 +211,31 @@ test("登录 → 打开群 → 看到 agent run 的每一步", async ({ page }) 
   await page.getByLabel("密码").fill(ADMIN.password);
   await page.getByRole("button", { name: "登录" }).click();
 
-  // 登录成功落在账号列表（DEFAULT_AFTER_LOGIN）。
-  await expect(page).toHaveURL(/\/accounts$/);
-  await expect(page.getByRole("heading", { name: "账号列表" })).toBeVisible();
+  // 登录成功落在工作台（DEFAULT_AFTER_LOGIN）。
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("heading", { name: "工作台" })).toBeVisible();
+  await expect(page.getByTestId("dashboard-stats")).toBeVisible();
 
-  await page.getByRole("link", { name: "群组" }).click();
+  // 左侧菜单 → 群组管理（客户端路由，不整页刷新）。
+  await page.getByRole("link", { name: "群组管理" }).click();
   await expect(page).toHaveURL(/\/groups$/);
-  await expect(page.getByRole("heading", { name: "群列表" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "群组管理" })).toBeVisible();
 
-  await page.getByRole("button", { name: group.id, exact: true }).click();
+  // 群在列表里以网关群 ID 显示，本身是进群详情的链接。
+  const gatewayGroupId = group.gatewayGroupId ?? "";
+
+  await page
+    .getByTestId("group-table")
+    .getByRole("link", { name: gatewayGroupId, exact: true })
+    .click();
   await expect(page).toHaveURL(new RegExp(`/groups/${group.id}$`));
-  await expect(page.getByRole("heading", { name: group.id })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: gatewayGroupId }),
+  ).toBeVisible();
 
-  // 成员表：acc-1 是群主；acc-2 入群后被建群 job 提成管理员（#11），角色列显示「管理员」。
+  // 成员页签：acc-1 是群主；acc-2 入群后被建群 job 提成管理员（#11），角色列显示「管理员」。
+  await page.getByRole("tab", { name: /成员/ }).click();
+
   const members = page.getByTestId("member-table");
   const memberRow = (accountId: string) =>
     members.getByRole("row").filter({
@@ -232,12 +245,16 @@ test("登录 → 打开群 → 看到 agent run 的每一步", async ({ page }) 
   await expect(memberRow(CREATOR)).toContainText("群主");
   await expect(memberRow(MEMBER)).toContainText("管理员");
 
-  // agent run 列表：那条 finished 的 run 在，点进去。
+  // Agent 运行页签：那条 finished 的 run 在（表里显示缩写的 id，完整 id 在链接的 data-run-id 上），点进去。
+  await page.getByRole("tab", { name: /Agent 运行/ }).click();
+
   const runs = page.getByTestId("agent-run-list");
-  const runRow = runs.getByRole("row").filter({ hasText: run.id });
+  // has 里的定位器按行内相对查找，所以从 page 起，不从 runs 起。
+  const runLink = page.locator(`a[data-run-id="${run.id}"]`);
+  const runRow = runs.getByRole("row").filter({ has: runLink });
 
   await expect(runRow).toContainText("已完成");
-  await runRow.getByRole("link", { name: run.id }).click();
+  await runLink.click();
 
   await expect(page).toHaveURL(new RegExp(`/agent-runs/${run.id}$`));
   await expect(page.getByRole("heading", { name: run.id })).toBeVisible();
@@ -263,8 +280,12 @@ test("viewer 登录后账号页没有写操作按钮", async ({ page }) => {
   await page.getByLabel("密码").fill(VIEWER.password);
   await page.getByRole("button", { name: "登录" }).click();
 
-  await expect(page).toHaveURL(/\/accounts$/);
+  await expect(page).toHaveURL(/\/dashboard$/);
+  // 侧栏底部的当前用户显示角色「只读」。
   await expect(page.getByText("只读", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "账号管理" }).click();
+  await expect(page).toHaveURL(/\/accounts$/);
   // 表已经渲染出行了（不是 loading 骨架），再断言没有按钮才有意义。
   await expect(
     page.getByRole("cell", { name: CREATOR, exact: true }),

@@ -2,17 +2,13 @@ import type { FormEvent } from "react";
 import type { FieldErrors, UseFormRegister } from "react-hook-form";
 
 import type { ResolveSequenceVarsResult } from "@/lib/sequence-vars";
-import type { ConnectionStatus } from "@/lib/ws";
 import type {
   SequenceRead,
   SequenceRunRead,
   SequenceStepDefinition,
 } from "@/services/sequence-service";
 
-import type {
-  CreateSequenceFormInput,
-  StartSequenceRunFormValues,
-} from "./sequence-run-schema";
+import type { StartSequenceRunFormValues } from "./sequence-run-schema";
 
 /** 可增删的行数组（hook 里 useFieldArray 的那一小片）：view 只渲染行、点加减。 */
 export interface FormRows<Row> {
@@ -81,20 +77,10 @@ export interface SequenceRunProgressViewProps {
   onRetry: () => void;
 }
 
-export type StepDefinitionRow = CreateSequenceFormInput["steps"][number];
-
-/** 新建序列的折叠表单：name + steps（accountRole / text / delaySeconds；index 由行位置派生）。 */
-export interface CreateSequenceFormViewProps {
-  register: UseFormRegister<CreateSequenceFormInput>;
-  errors: FieldErrors<CreateSequenceFormInput>;
-  steps: FormRows<StepDefinitionRow>;
-  submitting: boolean;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}
-
 export interface SequenceRunViewProps {
   groupId: string;
-  connection: ConnectionStatus;
+  /** 群在界面上的名字（网关群 ID）；群详情还没回来时为空串。 */
+  groupName: string;
   /** 群详情：不可写的原因由容器算好放进 form.disabledReason，这里只要加载 / 错误态。 */
   groupLoading: boolean;
   groupError: unknown;
@@ -105,5 +91,4 @@ export interface SequenceRunViewProps {
   preflight: PreflightDialogViewProps;
   /** 当前要展示进度的 run（刚启动的，或群里进行中的）；null 时不渲染进度卡。 */
   progress: SequenceRunProgressViewProps | null;
-  createForm: CreateSequenceFormViewProps | null;
 }

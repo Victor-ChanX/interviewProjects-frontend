@@ -1,10 +1,10 @@
-// 新建序列（POST /api/sequences）这一小条流：表单（RHF + zod，steps 行数组）→ createSequence →
-// 成功后重拉序列列表、清表单，并把新序列的 id 交给调用方（启动表单顺手选中它）。
-// 没有这个入口页面就没有序列可选，所以放在同一页做成折叠表单。
+// 新建序列（POST /api/sequences）这一小条流：弹窗里的表单（RHF + zod，steps 行数组）→ createSequence →
+// 成功后重拉序列列表、清表单、关弹窗。前端 #12 从序列运行页的折叠表单挪到「定时序列」页的对话框。
+// 关弹窗不清表单：填了一半关掉再打开还在（保存成功才清）。
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -21,10 +21,11 @@ import {
   createSequenceSchema,
   EMPTY_CREATE_FORM,
   toSequenceDefinitionPayload,
-} from "./sequence-run-schema";
+} from "./create-sequence-schema";
 
-export function useCreateSequence(onCreated: (id: string) => void) {
+export function useCreateSequence() {
   const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
   const form = useForm<
     CreateSequenceFormInput,
     unknown,
@@ -45,22 +46,24 @@ export function useCreateSequence(onCreated: (id: string) => void) {
   const onValid = useCallback(
     async (values: CreateSequenceFormValues) => {
       try {
-        const { id } = await mutateAsync(toSequenceDefinitionPayload(values));
+        await mutateAsync(toSequenceDefinitionPayload(values));
 
         await queryClient.invalidateQueries({
           queryKey: queryKeys.sequences.all,
         });
         reset(EMPTY_CREATE_FORM);
-        onCreated(id);
+        setOpen(false);
         toast.success(`序列「${values.name}」已创建`);
       } catch (error) {
         toast.error(getErrorMessage(error, "创建失败，请重试"));
       }
     },
-    [mutateAsync, onCreated, queryClient, reset],
+    [mutateAsync, queryClient, reset],
   );
 
   return {
+    open,
+    setOpen,
     register: form.register,
     errors: form.formState.errors,
     steps: stepRows,

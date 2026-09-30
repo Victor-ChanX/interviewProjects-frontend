@@ -4,7 +4,7 @@
 export const LOGIN_PATH = "/login";
 
 /** 登录后没有 next（或 next 不合法）时的落点：首页本身也重定向到这里（src/app/router.tsx）。 */
-export const DEFAULT_AFTER_LOGIN = "/accounts";
+export const DEFAULT_AFTER_LOGIN = "/dashboard";
 
 /**
  * 把 URL 里的 next 收窄成站内路径：必须以单个 `/` 开头（`//evil.com` 是协议相对地址，不认），

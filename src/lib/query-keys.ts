@@ -24,6 +24,11 @@ export const queryKeys = {
   agentRuns: {
     all: ["agent-runs"] as const,
     byGroup: (groupId: string) => ["agent-runs", "group", groupId] as const,
+    // 全局列表（后端 #22，游标在 pageParam 里、不进 key）：筛选参数进 key，空串表示不筛；
+    // lists() 是所有筛选组合的前缀（WS 事件按它 invalidate）。
+    lists: () => ["agent-runs", "list"] as const,
+    list: (filters: { status: string; groupId: string }) =>
+      ["agent-runs", "list", filters.status, filters.groupId] as const,
     detail: (id: string) => ["agent-runs", "detail", id] as const,
   },
   // 序列定义（题目 B1；前端 #6）：GET /api/sequences 是 { items, total }、无参数。
@@ -46,5 +51,24 @@ export const queryKeys = {
   llmSettings: {
     all: ["llm-settings"] as const,
     detail: () => ["llm-settings", "detail"] as const,
+  },
+  // 工作台概览（后端 #22）：工作台与侧栏「异常中心」的未处理数共用。
+  dashboard: {
+    all: ["dashboard"] as const,
+    summary: () => ["dashboard", "summary"] as const,
+  },
+  // 最近动态（GET /api/activity，useInfiniteQuery；游标在 pageParam 里）：每页条数不同的两处（工作台 20、
+  // 实时动态页 50）各一份缓存。
+  activity: {
+    all: ["activity"] as const,
+    feed: (limit: number) => ["activity", "feed", limit] as const,
+  },
+  // 异常中心：列表按页签（open / resolved）各一份，详情按 id。
+  inconsistencies: {
+    all: ["inconsistencies"] as const,
+    // 两个页签的列表共同前缀（新记录 / 被标记时按它重拉；详情另由事件就地改）。
+    lists: () => ["inconsistencies", "list"] as const,
+    list: (tab: string) => ["inconsistencies", "list", tab] as const,
+    detail: (id: string) => ["inconsistencies", "detail", id] as const,
   },
 } as const;

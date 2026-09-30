@@ -4,9 +4,12 @@
 // 422 ACCOUNT_NOT_ONLINE / 400 VALIDATION_ERROR 显示后端的整句 message（mutation.error 派生，留在弹窗里）。
 // 关弹窗不取消 job（后端照常跑，群列表随 WS job 事件刷新）；下次打开才清掉上一次的表单与进度
 // （Base UI 的浮层关闭后还在淡出，关的时候清会闪）。
+// 工作台的「新建群」快捷操作带 `?create=true` 进来：URL 里有它就当弹窗开着（渲染期派生，不用 effect 回写），
+// 关弹窗时把参数一起清掉。
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { parseAsBoolean, useQueryState } from "nuqs";
 import { useCallback, useMemo, useState } from "react";
 import { useController, useForm } from "react-hook-form";
 import { useNavigate } from "react-router";
@@ -35,8 +38,22 @@ export interface UseCreateGroupOptions {
 export function useCreateGroup({ enabled }: UseCreateGroupOptions) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const [createParam, setCreateParam] = useQueryState(
+    "create",
+    parseAsBoolean.withDefault(false),
+  );
+  const open = openState || (enabled && createParam);
   const [jobId, setJobId] = useState<string | null>(null);
+
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setOpenState(next);
+
+      if (!next) void setCreateParam(null);
+    },
+    [setCreateParam],
+  );
 
   const accountsQuery = useQuery({
     queryKey: queryKeys.accounts.list(),
@@ -84,7 +101,7 @@ export function useCreateGroup({ enabled }: UseCreateGroupOptions) {
       if (job.groupId)
         void navigate(`/groups/${encodeURIComponent(job.groupId)}`);
     },
-    [navigate, queryClient],
+    [navigate, queryClient, setOpen],
   );
 
   const progress = useJobProgress(jobId, { onSettled });
@@ -94,7 +111,7 @@ export function useCreateGroup({ enabled }: UseCreateGroupOptions) {
     resetMutation();
     setJobId(null);
     setOpen(true);
-  }, [reset, resetMutation]);
+  }, [reset, resetMutation, setOpen]);
 
   /** 换群主：新群主若已在成员里就移出（成员不能含群主）。 */
   const changeCreator = useCallback(

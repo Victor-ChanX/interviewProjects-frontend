@@ -8,6 +8,7 @@ import {
   agentRunUrl,
   getAgentRun,
   groupAgentRunsUrl,
+  listAgentRuns,
   listGroupAgentRuns,
 } from "@/services/agent-run-service";
 
@@ -39,5 +40,40 @@ describe("getAgentRun", () => {
 
     await expect(getAgentRun("r1")).resolves.toEqual({ id: "r1", steps: [] });
     expect(api.get).toHaveBeenCalledWith("/api/agent-runs/r1");
+  });
+});
+
+describe("listAgentRuns", () => {
+  it("GETs the global list with every filter as query", async () => {
+    const page = { items: [], nextCursor: null };
+
+    api.get.mockResolvedValue(page);
+
+    await expect(
+      listAgentRuns({
+        status: "blocked",
+        groupId: "g1",
+        before: "c",
+        limit: 50,
+      }),
+    ).resolves.toEqual(page);
+    expect(api.get).toHaveBeenCalledWith("/api/agent-runs", {
+      query: { status: "blocked", groupId: "g1", before: "c", limit: 50 },
+    });
+  });
+
+  it("leaves unset filters undefined (the request layer drops them)", async () => {
+    api.get.mockResolvedValue({ items: [], nextCursor: null });
+
+    await listAgentRuns({ limit: 20 });
+
+    expect(api.get).toHaveBeenCalledWith("/api/agent-runs", {
+      query: {
+        status: undefined,
+        groupId: undefined,
+        before: undefined,
+        limit: 20,
+      },
+    });
   });
 });

@@ -52,7 +52,7 @@ export function LeaveAllDialogView({
                 <li>
                   任一账号退群失败，群主不退、群保持原状态，失败的步骤会列出来。
                 </li>
-                <li>全部成功后群变为「已退群」，成员表清空，不能再发消息。</li>
+                <li>全部成功后群变为「已退出」，成员表清空，不能再发消息。</li>
               </ul>
               {submitError ? (
                 <Alert variant="destructive">
@@ -65,20 +65,18 @@ export function LeaveAllDialogView({
         </DialogBody>
 
         <DialogFooter>
-          {/* Button 渲染成 DialogClose：ui/button 没有 forwardRef，反过来写 Base UI 会往 Button 上挂 ref 而告警。 */}
           {progress ? (
-            <Button variant="outline" render={<DialogClose />}>
+            <DialogClose render={<Button variant="outline" />}>
               {progress.running ? "后台运行" : "关闭"}
-            </Button>
+            </DialogClose>
           ) : (
             <>
-              <Button
-                variant="outline"
-                render={<DialogClose />}
+              <DialogClose
+                render={<Button variant="outline" />}
                 disabled={submitting}
               >
                 取消
-              </Button>
+              </DialogClose>
               <Button
                 type="button"
                 variant="destructive"
