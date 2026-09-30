@@ -1,0 +1,349 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const queryClient = vi.hoisted(() => ({ invalidateQueries: vi.fn() }));
+const getAccessToken = vi.hoisted(() => vi.fn<() => string | null>());
+
+vi.mock("@/lib/query-client", () => ({ queryClient }));
+vi.mock("@/lib/auth", () => ({ getAccessToken }));
+
+import {
+  configureRealtime,
+  connectRealtime,
+  disconnectRealtime,
+  getConnectionStatus,
+  getLastSeq,
+  LAST_SEQ_STORAGE_KEY,
+  resetRealtimeForTests,
+  subscribeRealtime,
+  WS_CLOSE_UNAUTHORIZED,
+  type SocketLike,
+} from "@/lib/ws";
+
+class FakeSocket implements SocketLike {
+  readyState = 0;
+  sent: string[] = [];
+  closed: Array<{ code?: number; reason?: string }> = [];
+  onopen: SocketLike["onopen"] = null;
+  onmessage: SocketLike["onmessage"] = null;
+  onclose: SocketLike["onclose"] = null;
+  onerror: SocketLike["onerror"] = null;
+
+  constructor(readonly url: string) {}
+
+  send(data: string) {
+    this.sent.push(data);
+  }
+
+  close(code?: number, reason?: string) {
+    this.closed.push({ code, reason });
+    this.readyState = 3;
+    // 浏览器会在 close() 之后异步派发 close 事件；这里同步派发，测试少一步等待。
+    this.onclose?.({ code: code ?? 1000 });
+  }
+
+  open() {
+    this.readyState = 1;
+    this.onopen?.({});
+  }
+
+  push(frame: unknown) {
+    this.onmessage?.({ data: JSON.stringify(frame) });
+  }
+
+  pushRaw(data: unknown) {
+    this.onmessage?.({ data });
+  }
+
+  drop(code = 1006) {
+    this.readyState = 3;
+    this.onclose?.({ code });
+  }
+
+  frames(): unknown[] {
+    return this.sent.map((s) => JSON.parse(s) as unknown);
+  }
+}
+
+const sockets: FakeSocket[] = [];
+const HEARTBEAT_MS = 1_000;
+
+function lastSocket(): FakeSocket {
+  const socket = sockets[sockets.length - 1];
+
+  if (!socket) throw new Error("no socket created");
+
+  return socket;
+}
+
+/** 建连并走完 open + auth success，返回这条 socket。 */
+function connectAndAuth(): FakeSocket {
+  connectRealtime();
+
+  const socket = lastSocket();
+
+  socket.open();
+  socket.push({ type: "auth", success: true });
+
+  return socket;
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  sockets.length = 0;
+  getAccessToken.mockReturnValue("tok");
+  configureRealtime({
+    url: "ws://test/ws",
+    createSocket: (url) => {
+      const socket = new FakeSocket(url);
+
+      sockets.push(socket);
+
+      return socket;
+    },
+    onResync: () => {
+      void queryClient.invalidateQueries();
+    },
+    heartbeatMs: HEARTBEAT_MS,
+    backoffBaseMs: 100,
+    backoffMaxMs: 1_000,
+    random: () => 0,
+  });
+});
+
+afterEach(() => {
+  resetRealtimeForTests();
+  window.sessionStorage.clear();
+  vi.clearAllMocks();
+  vi.useRealTimers();
+});
+
+describe("auth handshake", () => {
+  it("sends the auth frame with the access token and no sinceSeq on a fresh session", () => {
+    connectRealtime();
+
+    const socket = lastSocket();
+
+    expect(socket.url).toBe("ws://test/ws");
+    expect(getConnectionStatus()).toBe("connecting");
+
+    socket.open();
+
+    expect(socket.frames()).toEqual([{ type: "auth", accessToken: "tok" }]);
+    // socket 开了但 auth 还没通过：仍是 connecting。
+    expect(getConnectionStatus()).toBe("connecting");
+
+    socket.push({ type: "auth", success: true });
+
+    expect(getConnectionStatus()).toBe("open");
+  });
+
+  it("does not open a socket without a token", () => {
+    getAccessToken.mockReturnValue(null);
+    connectRealtime();
+
+    expect(sockets).toHaveLength(0);
+    expect(getConnectionStatus()).toBe("closed");
+  });
+
+  it("is idempotent while a socket is alive", () => {
+    connectAndAuth();
+    connectRealtime();
+    connectRealtime();
+
+    expect(sockets).toHaveLength(1);
+  });
+
+  it("resumes with the sinceSeq stored in sessionStorage after a reload", () => {
+    window.sessionStorage.setItem(LAST_SEQ_STORAGE_KEY, "9");
+    connectRealtime();
+    lastSocket().open();
+
+    expect(lastSocket().frames()).toEqual([
+      { type: "auth", accessToken: "tok", sinceSeq: 9 },
+    ]);
+  });
+});
+
+describe("event frames", () => {
+  it("dispatches by type, drops seq <= lastSeq and persists lastSeq", () => {
+    const socket = connectAndAuth();
+    const seen: number[] = [];
+
+    subscribeRealtime((event) => seen.push(event.seq));
+
+    socket.push({ seq: 5, type: "message", payload: { groupId: "g" } });
+    socket.push({ seq: 5, type: "message", payload: { groupId: "g" } });
+    socket.push({ seq: 4, type: "message", payload: { groupId: "g" } });
+    socket.push({ seq: 6, type: "agent_run", payload: {} });
+
+    expect(seen).toEqual([5, 6]);
+    expect(getLastSeq()).toBe(6);
+    expect(window.sessionStorage.getItem(LAST_SEQ_STORAGE_KEY)).toBe("6");
+  });
+
+  it("survives a bad JSON frame and a throwing handler", () => {
+    const socket = connectAndAuth();
+    const seen: number[] = [];
+
+    subscribeRealtime(() => {
+      throw new Error("boom");
+    });
+    subscribeRealtime((event) => seen.push(event.seq));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    socket.pushRaw("{not json");
+    socket.push({ seq: 1, type: "message", payload: {} });
+    socket.push({ seq: 2, type: "message", payload: {} });
+
+    expect(seen).toEqual([1, 2]);
+  });
+
+  it("unsubscribing stops delivery but keeps the connection", () => {
+    const socket = connectAndAuth();
+    const seen: number[] = [];
+    const unsubscribe = subscribeRealtime((event) => seen.push(event.seq));
+
+    socket.push({ seq: 1, type: "message", payload: {} });
+    unsubscribe();
+    socket.push({ seq: 2, type: "message", payload: {} });
+
+    expect(seen).toEqual([1]);
+    expect(socket.closed).toEqual([]);
+    expect(getConnectionStatus()).toBe("open");
+  });
+});
+
+describe("resync", () => {
+  it("invalidates every query when the server reports a replay gap", () => {
+    const socket = connectAndAuth();
+
+    socket.push({ type: "resync", sinceSeq: 3, fromSeq: 1003 });
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith();
+  });
+});
+
+describe("reconnect", () => {
+  it("reconnects after backoff and sends the last seq as sinceSeq", () => {
+    const first = connectAndAuth();
+
+    first.push({ seq: 7, type: "message", payload: {} });
+    first.drop();
+
+    expect(getConnectionStatus()).toBe("closed");
+    expect(sockets).toHaveLength(1);
+
+    // 第一次退避 = base * 2^0 = 100ms（random 固定 0，无抖动）。
+    vi.advanceTimersByTime(99);
+    expect(sockets).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(sockets).toHaveLength(2);
+
+    const second = lastSocket();
+
+    second.open();
+
+    expect(second.frames()).toEqual([
+      { type: "auth", accessToken: "tok", sinceSeq: 7 },
+    ]);
+  });
+
+  it("grows the delay exponentially up to the cap and resets after auth", () => {
+    const first = connectAndAuth();
+
+    first.drop();
+    vi.advanceTimersByTime(100); // 2^0 * 100
+    lastSocket().drop();
+    vi.advanceTimersByTime(199);
+    expect(sockets).toHaveLength(2);
+    vi.advanceTimersByTime(1); // 2^1 * 100
+    expect(sockets).toHaveLength(3);
+    lastSocket().drop();
+    vi.advanceTimersByTime(400); // 2^2 * 100
+    expect(sockets).toHaveLength(4);
+    lastSocket().drop();
+    vi.advanceTimersByTime(800); // 2^3 * 100
+    expect(sockets).toHaveLength(5);
+    lastSocket().drop();
+    vi.advanceTimersByTime(1_000); // 2^4 * 100 = 1600 → cap 1000
+    expect(sockets).toHaveLength(6);
+
+    // auth 通过后 attempts 归零：下一次断线又从 100ms 开始。
+    lastSocket().open();
+    lastSocket().push({ type: "auth", success: true });
+    lastSocket().drop();
+    vi.advanceTimersByTime(100);
+    expect(sockets).toHaveLength(7);
+  });
+
+  it("does not reconnect after disconnectRealtime() and clears lastSeq", () => {
+    const socket = connectAndAuth();
+
+    socket.push({ seq: 3, type: "message", payload: {} });
+    disconnectRealtime();
+
+    expect(socket.closed).toEqual([{ code: 1000, reason: "logout" }]);
+    expect(getLastSeq()).toBe(0);
+    expect(window.sessionStorage.getItem(LAST_SEQ_STORAGE_KEY)).toBeNull();
+
+    vi.advanceTimersByTime(10_000);
+    expect(sockets).toHaveLength(1);
+    expect(getConnectionStatus()).toBe("closed");
+  });
+
+  it("does not reconnect when the server rejects the token (4401)", () => {
+    connectRealtime();
+    lastSocket().open();
+    lastSocket().push({ type: "auth", success: false, code: "UNAUTHORIZED" });
+    lastSocket().drop(WS_CLOSE_UNAUTHORIZED);
+
+    vi.advanceTimersByTime(10_000);
+    expect(sockets).toHaveLength(1);
+
+    // 重新登录后显式 connectRealtime() 才再连。
+    connectRealtime();
+    expect(sockets).toHaveLength(2);
+  });
+
+  it("reconnects immediately when the tab comes back to the foreground", () => {
+    connectAndAuth();
+    lastSocket().drop();
+    vi.advanceTimersByTime(10);
+
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    expect(sockets).toHaveLength(2);
+    // 退避定时器已被取消：不会再开第三条。
+    vi.advanceTimersByTime(2_000);
+    expect(sockets).toHaveLength(2);
+  });
+});
+
+describe("heartbeat", () => {
+  it("pings every interval and closes the socket when nothing comes back", () => {
+    const socket = connectAndAuth();
+
+    vi.advanceTimersByTime(HEARTBEAT_MS);
+    expect(socket.frames()).toEqual([
+      { type: "auth", accessToken: "tok" },
+      { type: "ping" },
+    ]);
+
+    socket.push({ type: "pong" });
+    vi.advanceTimersByTime(HEARTBEAT_MS);
+    expect(socket.frames()).toHaveLength(3);
+    expect(socket.closed).toEqual([]);
+
+    // 这个周期一帧都没收到：视为半开，主动关闭并排重连。
+    vi.advanceTimersByTime(HEARTBEAT_MS);
+    expect(socket.closed).toEqual([
+      { code: 4000, reason: "heartbeat timeout" },
+    ]);
+    expect(getConnectionStatus()).toBe("closed");
+    vi.advanceTimersByTime(100);
+    expect(sockets).toHaveLength(2);
+  });
+});

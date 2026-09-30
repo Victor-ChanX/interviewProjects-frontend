@@ -1,18 +1,14 @@
-// 布局路由：壳 + <Outlet />。只做路由级装配，不碰数据层。
+// 受保护区域的布局路由：登录守卫 + 壳（顶栏 / 导航）+ <Outlet />。只做路由级装配，不碰数据层。
+// 守卫与壳的编排在 src/components/app-shell（container 读会话，未登录渲染 <Navigate to="/login?next=…" />）。
 
-import { Link, Outlet } from "react-router";
+import { Outlet } from "react-router";
+
+import { AppShellContainer } from "@/components/app-shell/app-shell-container";
 
 export function Component() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-4 py-3">
-        <Link to="/example" className="text-sm font-medium">
-          Example
-        </Link>
-      </header>
-      <main className="mx-auto max-w-3xl p-4">
-        <Outlet />
-      </main>
-    </div>
+    <AppShellContainer>
+      <Outlet />
+    </AppShellContainer>
   );
 }

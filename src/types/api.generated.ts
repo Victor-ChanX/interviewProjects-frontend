@@ -4,20 +4,17 @@
  */
 
 export interface paths {
-    "/api/examples": {
+    "/api/accounts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 分页列出示例 */
+        /** 列出全部服务账号及其状态 */
         get: {
             parameters: {
-                query?: {
-                    page?: number;
-                    pageSize?: number;
-                };
+                query?: never;
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -30,35 +27,47 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ExampleListResponse"];
+                        "application/json": components["schemas"]["AccountList"];
                     };
                 };
             };
         };
         put?: never;
-        /** 创建示例 */
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounts/{id}/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 调网关 connect，账号 idle / disconnected → online */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
-                path?: never;
+                path: {
+                    id: string;
+                };
                 cookie?: never;
             };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        name: string;
-                    };
-                };
-            };
+            requestBody?: never;
             responses: {
                 /** @description Default Response */
-                201: {
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ExampleRead"];
+                        "application/json": components["schemas"]["AccountRead"];
                     };
                 };
             };
@@ -69,20 +78,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/examples/{id}": {
+    "/api/accounts/{id}/transition": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 按 id 读取示例 */
+        get?: never;
+        put?: never;
+        /** 操作员手动标记账号状态（expectedFrom 做 CAS） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        expectedFrom: components["schemas"]["AccountStatusInput"];
+                        to: components["schemas"]["AccountStatusInput"];
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccountTransitionResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 某次 agent run 的详情：状态、结束原因、summary 与全部步骤（含协议错误步） */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    id: number;
+                    id: string;
                 };
                 cookie?: never;
             };
@@ -94,13 +148,310 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ExampleRead"];
+                        "application/json": components["schemas"]["AgentRunDetail"];
                     };
                 };
             };
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 用户名密码登录，签发 access token */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        password: string;
+                        username: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LoginResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出全部群（含成员与进行中的运行） */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["GroupList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** 建群 + 拉人 + 提升 memberAccountIds[0] 为管理员（异步 job，202） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        creatorAccountId: string;
+                        memberAccountIds: string[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreateGroupResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/groups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 群详情：成员、开关、进行中的运行 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["GroupRead"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 改群开关 agentEnabled / autoKickEnabled */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        agentEnabled?: boolean;
+                        autoKickEnabled?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["GroupRead"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/api/groups/{id}/agent-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 某群最近的 agent run 列表（最新在前，不含 steps） */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AgentRunListResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/groups/{id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 群消息时间线：按 sentAt 倒序，游标分页（before = 上一页的 nextCursor） */
+        get: {
+            parameters: {
+                query?: {
+                    before?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MessagePage"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/groups/{id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 以某服务账号身份往群里发一条消息（入队，202） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        accountId: string;
+                        text: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SendResponse"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -143,51 +494,373 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查异步任务（建群 / leave-all）的状态与失败步骤 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    jobId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["JobRead"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        ExampleListResponse: {
-            items: components["schemas"]["ExampleRead"][];
-            page: number;
-            pageSize: number;
-            total: number;
+        AccountList: components["schemas"]["AccountRead"][];
+        AccountListInput: components["schemas"]["AccountReadInput"][];
+        AccountRead: {
+            id: string;
+            platformUserId: string | null;
+            rateLimitedUntil: string | null;
+            status: components["schemas"]["AccountStatus"];
         };
-        ExampleListResponseInput: {
-            items: components["schemas"]["ExampleReadInput"][];
-            page: number;
-            pageSize: number;
-            total: number;
-        };
-        ExampleRead: {
-            /** Format: date-time */
-            createdAt: string;
-            id: number;
-            name: string;
-            status: components["schemas"]["ExampleStatus"];
-        };
-        ExampleReadInput: {
-            /** Format: date-time */
-            createdAt: string;
-            id: number;
-            name: string;
-            status: components["schemas"]["ExampleStatusInput"];
+        AccountReadInput: {
+            id: string;
+            platformUserId: string | null;
+            rateLimitedUntil: string | null;
+            status: components["schemas"]["AccountStatusInput"];
         };
         /** @enum {string} */
-        ExampleStatus: "active" | "archived";
+        AccountStatus: "idle" | "online" | "rate_limited" | "disconnected" | "suspended" | "session_expired";
         /** @enum {string} */
-        ExampleStatusInput: "active" | "archived";
+        AccountStatusInput: "idle" | "online" | "rate_limited" | "disconnected" | "suspended" | "session_expired";
+        AccountTransitionResponse: {
+            changed: boolean;
+            from: components["schemas"]["AccountStatus"];
+            id: string;
+            membersRemovedCount: number;
+            messagesCancelledCount: number;
+            platformUserId: string | null;
+            rateLimitedUntil: string | null;
+            status: components["schemas"]["AccountStatus"];
+            stepsSkippedCount: number;
+        };
+        AccountTransitionResponseInput: {
+            changed: boolean;
+            from: components["schemas"]["AccountStatusInput"];
+            id: string;
+            membersRemovedCount: number;
+            messagesCancelledCount: number;
+            platformUserId: string | null;
+            rateLimitedUntil: string | null;
+            status: components["schemas"]["AccountStatusInput"];
+            stepsSkippedCount: number;
+        };
+        AgentRunDetail: {
+            accumulatedMs: number;
+            budgetMs: number;
+            /** Format: date-time */
+            createdAt: string;
+            endReason: components["schemas"]["AgentRunEndReason"] | null;
+            finishedAt: string | null;
+            groupId: string;
+            id: string;
+            maxSteps: number;
+            status: components["schemas"]["AgentRunStatus"];
+            stepCount: number;
+            steps: components["schemas"]["AgentStepRead"][];
+            summary: string | null;
+            triggerMessages: components["schemas"]["AgentTriggerMessage"][];
+        };
+        AgentRunDetailInput: {
+            accumulatedMs: number;
+            budgetMs: number;
+            /** Format: date-time */
+            createdAt: string;
+            endReason: components["schemas"]["AgentRunEndReasonInput"] | null;
+            finishedAt: string | null;
+            groupId: string;
+            id: string;
+            maxSteps: number;
+            status: components["schemas"]["AgentRunStatusInput"];
+            stepCount: number;
+            steps: components["schemas"]["AgentStepReadInput"][];
+            summary: string | null;
+            triggerMessages: components["schemas"]["AgentTriggerMessageInput"][];
+        };
+        /** @enum {string} */
+        AgentRunEndReason: "final" | "budget_exhausted" | "wall_clock" | "protocol_errors" | "audit_blocked" | "cancelled";
+        /** @enum {string} */
+        AgentRunEndReasonInput: "final" | "budget_exhausted" | "wall_clock" | "protocol_errors" | "audit_blocked" | "cancelled";
+        AgentRunListResponse: {
+            items: components["schemas"]["AgentRunRead"][];
+            total: number;
+        };
+        AgentRunListResponseInput: {
+            items: components["schemas"]["AgentRunReadInput"][];
+            total: number;
+        };
+        AgentRunRead: {
+            accumulatedMs: number;
+            budgetMs: number;
+            /** Format: date-time */
+            createdAt: string;
+            endReason: components["schemas"]["AgentRunEndReason"] | null;
+            finishedAt: string | null;
+            groupId: string;
+            id: string;
+            maxSteps: number;
+            status: components["schemas"]["AgentRunStatus"];
+            stepCount: number;
+            summary: string | null;
+            triggerMessages: components["schemas"]["AgentTriggerMessage"][];
+        };
+        AgentRunReadInput: {
+            accumulatedMs: number;
+            budgetMs: number;
+            /** Format: date-time */
+            createdAt: string;
+            endReason: components["schemas"]["AgentRunEndReasonInput"] | null;
+            finishedAt: string | null;
+            groupId: string;
+            id: string;
+            maxSteps: number;
+            status: components["schemas"]["AgentRunStatusInput"];
+            stepCount: number;
+            summary: string | null;
+            triggerMessages: components["schemas"]["AgentTriggerMessageInput"][];
+        };
+        /** @enum {string} */
+        AgentRunStatus: "running" | "finished" | "failed" | "blocked" | "cancelled";
+        /** @enum {string} */
+        AgentRunStatusInput: "running" | "finished" | "failed" | "blocked" | "cancelled";
+        /** @enum {string} */
+        AgentStepKind: "tool_use" | "final" | "protocol_error";
+        /** @enum {string} */
+        AgentStepKindInput: "tool_use" | "final" | "protocol_error";
+        AgentStepRead: {
+            auditAttempts: number;
+            auditVerdict: components["schemas"]["AuditVerdict"] | null;
+            completedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            errorCode: string | null;
+            index: number;
+            input: {
+                [key: string]: unknown;
+            } | null;
+            isError: boolean;
+            kind: components["schemas"]["AgentStepKind"];
+            name: string | null;
+            rawResponse: string | null;
+            resultSummary: string | null;
+            toolUseId: string | null;
+        };
+        AgentStepReadInput: {
+            auditAttempts: number;
+            auditVerdict: components["schemas"]["AuditVerdictInput"] | null;
+            completedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            errorCode: string | null;
+            index: number;
+            input: {
+                [key: string]: unknown;
+            } | null;
+            isError: boolean;
+            kind: components["schemas"]["AgentStepKindInput"];
+            name: string | null;
+            rawResponse: string | null;
+            resultSummary: string | null;
+            toolUseId: string | null;
+        };
+        AgentTriggerMessage: {
+            msgId: string;
+            senderPlatformUserId: string;
+            sentAt: string;
+            text: string;
+        };
+        AgentTriggerMessageInput: {
+            msgId: string;
+            senderPlatformUserId: string;
+            sentAt: string;
+            text: string;
+        };
+        /** @enum {string} */
+        AuditVerdict: "pass" | "fail";
+        /** @enum {string} */
+        AuditVerdictInput: "pass" | "fail";
+        CreateGroupResponse: {
+            jobId: string;
+        };
+        CreateGroupResponseInput: {
+            jobId: string;
+        };
+        /** @enum {string} */
+        DeliveryStatus: "queued" | "accepted" | "sent" | "failed" | "unknown" | "cancelled";
+        /** @enum {string} */
+        DeliveryStatusInput: "queued" | "accepted" | "sent" | "failed" | "unknown" | "cancelled";
+        GroupList: components["schemas"]["GroupRead"][];
+        GroupListInput: components["schemas"]["GroupReadInput"][];
+        GroupMemberRead: {
+            accountId: string | null;
+            platformUserId: string;
+            role: components["schemas"]["MemberRole"];
+        };
+        GroupMemberReadInput: {
+            accountId: string | null;
+            platformUserId: string;
+            role: components["schemas"]["MemberRoleInput"];
+        };
+        GroupRead: {
+            activeAgentRunId: string | null;
+            activeSequenceRunId: string | null;
+            agentEnabled: boolean;
+            autoKickEnabled: boolean;
+            creatorAccountId: string;
+            gatewayGroupId: string | null;
+            id: string;
+            members: components["schemas"]["GroupMemberRead"][];
+            status: components["schemas"]["GroupStatus"];
+        };
+        GroupReadInput: {
+            activeAgentRunId: string | null;
+            activeSequenceRunId: string | null;
+            agentEnabled: boolean;
+            autoKickEnabled: boolean;
+            creatorAccountId: string;
+            gatewayGroupId: string | null;
+            id: string;
+            members: components["schemas"]["GroupMemberReadInput"][];
+            status: components["schemas"]["GroupStatusInput"];
+        };
+        /** @enum {string} */
+        GroupStatus: "active" | "unreachable" | "left";
+        /** @enum {string} */
+        GroupStatusInput: "active" | "unreachable" | "left";
         HealthRead: {
             /** @constant */
-            status: "ok";
-            /** Format: date-time */
-            time: string;
+            ok: true;
+            schemaVersion: string;
         };
         HealthReadInput: {
             /** @constant */
-            status: "ok";
+            ok: true;
+            schemaVersion: string;
+        };
+        JobErrorRead: {
+            accountId: string | null;
+            code: string;
+            message: string | null;
+            step: string;
+            stepKind: components["schemas"]["JobStepKind"];
+        };
+        JobErrorReadInput: {
+            accountId: string | null;
+            code: string;
+            message: string | null;
+            step: string;
+            stepKind: components["schemas"]["JobStepKindInput"];
+        };
+        /** @enum {string} */
+        JobKind: "create_group" | "leave_all";
+        /** @enum {string} */
+        JobKindInput: "create_group" | "leave_all";
+        JobRead: {
             /** Format: date-time */
-            time: string;
+            createdAt: string;
+            errors: components["schemas"]["JobErrorRead"][];
+            finishedAt: string | null;
+            groupId: string | null;
+            id: string;
+            kind: components["schemas"]["JobKind"];
+            status: components["schemas"]["JobStatus"];
+            step: string | null;
+        };
+        JobReadInput: {
+            /** Format: date-time */
+            createdAt: string;
+            errors: components["schemas"]["JobErrorReadInput"][];
+            finishedAt: string | null;
+            groupId: string | null;
+            id: string;
+            kind: components["schemas"]["JobKindInput"];
+            status: components["schemas"]["JobStatusInput"];
+            step: string | null;
+        };
+        /** @enum {string} */
+        JobStatus: "running" | "finished" | "failed";
+        /** @enum {string} */
+        JobStatusInput: "running" | "finished" | "failed";
+        /** @enum {string} */
+        JobStepKind: "create" | "invite" | "join" | "promote" | "leave";
+        /** @enum {string} */
+        JobStepKindInput: "create" | "invite" | "join" | "promote" | "leave";
+        LoginResponse: {
+            accessToken: string;
+        };
+        LoginResponseInput: {
+            accessToken: string;
+        };
+        /** @enum {string} */
+        MemberRole: "creator" | "admin" | "member";
+        /** @enum {string} */
+        MemberRoleInput: "creator" | "admin" | "member";
+        MessagePage: {
+            items: components["schemas"]["MessageRead"][];
+            nextCursor: string | null;
+        };
+        MessagePageInput: {
+            items: components["schemas"]["MessageReadInput"][];
+            nextCursor: string | null;
+        };
+        MessageRead: {
+            clientMsgId: string | null;
+            deliveryStatus: components["schemas"]["DeliveryStatus"] | null;
+            failCode: string | null;
+            isOwn: boolean;
+            msgId: string | null;
+            senderPlatformUserId: string;
+            /** Format: date-time */
+            sentAt: string;
+            text: string;
+        };
+        MessageReadInput: {
+            clientMsgId: string | null;
+            deliveryStatus: components["schemas"]["DeliveryStatusInput"] | null;
+            failCode: string | null;
+            isOwn: boolean;
+            msgId: string | null;
+            senderPlatformUserId: string;
+            /** Format: date-time */
+            sentAt: string;
+            text: string;
+        };
+        SendResponse: {
+            clientMsgId: string;
+        };
+        SendResponseInput: {
+            clientMsgId: string;
         };
     };
     responses: never;

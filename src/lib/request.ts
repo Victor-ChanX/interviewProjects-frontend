@@ -1,20 +1,42 @@
 // 请求层：base URL、鉴权头、JSON、401 处理、错误解析、重试只在这一处
 // （frontend-api-function-calls「Request Layer」）。业务代码只用 @/lib/api 的 api.get/post。
 //
-// 401：清 access token 并交给 onAuthError；单飞 refresh 随后端 auth 一起落地（B3）。
+// access token 的存取在 src/lib/auth.ts（内存 + sessionStorage 备份）：这里只取来放进
+// Authorization，401 时调 clearSession() 清掉再交给 onAuthError（受保护布局的容器注入
+// 「跳登录页带 next」，src/components/app-shell/use-app-shell.ts）。
+//
+// TODO(#17 单飞 refresh)：后端 `POST /api/auth/refresh` 落地后，401 先在这里单飞刷新
+// （模块级 `let refreshing: Promise<void> | null`，并发 401 只发一次 refresh、各重放一次原请求，
+// 重放仍 401 才清会话走 onAuthError；refresh token 只在 HttpOnly cookie，请求带 credentials）。
+// 规则见 frontend-api-function-calls「请求层：401 与刷新」req.refresh-single-flight。
+
+import { clearSession, getAccessToken } from "@/lib/auth";
+
+export { getAccessToken } from "@/lib/auth";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
-const ACCESS_TOKEN_KEY = "access_token";
 
 export class RequestError extends Error {
   readonly status: number;
   readonly detail: unknown;
+  /**
+   * 后端错误信封 `{ error: { code, message, requestId } }` 里的机器码
+   * （ILLEGAL_TRANSITION / CAS_CONFLICT / ACCOUNT_UNAVAILABLE / GATEWAY_ERROR …）。
+   * 业务层按它分支，不比对文案；信封里没有则为 null。
+   */
+  readonly code: string | null;
 
-  constructor(status: number, message: string, detail?: unknown) {
+  constructor(
+    status: number,
+    message: string,
+    detail?: unknown,
+    code: string | null = null,
+  ) {
     super(message);
     this.name = "RequestError";
     this.status = status;
     this.detail = detail;
+    this.code = code;
   }
 }
 
@@ -43,28 +65,13 @@ export interface RequestConfig {
 }
 
 const config: RequestConfig = {
+  // 出厂空实现：受保护布局挂上后由 use-app-shell 注入「跳登录页带 next」。没注入时 401 也只是
+  // 清会话 —— 守卫（app-shell-container）订阅着会话，读到 null 会自己渲染 <Navigate> 去登录页。
   onAuthError: () => {},
 };
 
 export function configureRequest(next: Partial<RequestConfig>): void {
   Object.assign(config, next);
-}
-
-export function getAccessToken(): string | null {
-  try {
-    return window.localStorage.getItem(ACCESS_TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function setAccessToken(token: string | null): void {
-  try {
-    if (token) window.localStorage.setItem(ACCESS_TOKEN_KEY, token);
-    else window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-  } catch {
-    // storage 不可用（隐私模式）时静默：请求会以未登录身份发出并走 401 流程。
-  }
 }
 
 export function buildUrl(
@@ -84,11 +91,29 @@ export function buildUrl(
 
 async function parseErrorMessage(
   response: Response,
-): Promise<{ message: string; detail: unknown }> {
+): Promise<{ message: string; detail: unknown; code: string | null }> {
   const fallback = `请求失败（HTTP ${response.status}）`;
 
   try {
     const data: unknown = await response.json();
+
+    // 本仓后端的信封（题目 2.3）：{ error: { code, message, requestId, ...业务字段 } }。
+    if (data && typeof data === "object" && "error" in data) {
+      const envelope = (data as { error: unknown }).error;
+
+      if (envelope && typeof envelope === "object") {
+        const { code, message } = envelope as {
+          code?: unknown;
+          message?: unknown;
+        };
+
+        return {
+          message: typeof message === "string" && message ? message : fallback,
+          detail: envelope,
+          code: typeof code === "string" ? code : null,
+        };
+      }
+    }
 
     if (data && typeof data === "object" && "detail" in data) {
       const detail = (data as { detail: unknown }).detail;
@@ -96,12 +121,13 @@ async function parseErrorMessage(
       return {
         message: typeof detail === "string" ? detail : fallback,
         detail,
+        code: null,
       };
     }
 
-    return { message: fallback, detail: data };
+    return { message: fallback, detail: data, code: null };
   } catch {
-    return { message: fallback, detail: undefined };
+    return { message: fallback, detail: undefined, code: null };
   }
 }
 
@@ -125,7 +151,7 @@ async function parseBody<T>(
   return (await response.text()) as T;
 }
 
-// 401 刷新（单飞 refresh）随后端 `POST /api/auth/refresh` 一起落地（见 docs/plan.md B3）。
+// 401 刷新（单飞 refresh）随后端 `POST /api/auth/refresh` 一起落地（#17，见文件头 TODO）。
 
 async function fetchWithRetry(
   url: string,
@@ -213,15 +239,16 @@ export async function request<T>(
   );
 
   // responseInterceptor 留在重试循环之外：HTTP 错误不重发，401 只走一次刷新。
+  // 登录接口自己传 auth: false：账号密码错的 401 不算会话失效。
   if (response.status === 401 && auth) {
-    setAccessToken(null);
+    clearSession();
     config.onAuthError();
   }
 
   if (!response.ok) {
-    const { message, detail } = await parseErrorMessage(response);
+    const { message, detail, code } = await parseErrorMessage(response);
 
-    throw new RequestError(response.status, message, detail);
+    throw new RequestError(response.status, message, detail, code);
   }
 
   return parseBody<T>(response, responseType);
