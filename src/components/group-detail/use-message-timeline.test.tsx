@@ -49,6 +49,8 @@ function msg(
     text: "t",
     deliveryStatus: null,
     failCode: null,
+    mediaUrl: null,
+    localFilePath: null,
     ...overrides,
   };
 }

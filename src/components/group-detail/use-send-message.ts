@@ -89,6 +89,8 @@ export function useSendMessage({
           sentAt: new Date().toISOString(),
           deliveryStatus: "queued",
           failCode: null,
+          mediaUrl: null,
+          localFilePath: null,
         };
 
         // 「加载更早」进行中也不能被它的写回盖掉（前端 #16）。

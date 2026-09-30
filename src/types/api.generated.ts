@@ -1789,6 +1789,8 @@ export interface components {
             deliveryStatus: components["schemas"]["DeliveryStatus"] | null;
             failCode: string | null;
             isOwn: boolean;
+            localFilePath: string | null;
+            mediaUrl: string | null;
             msgId: string | null;
             senderPlatformUserId: string;
             /** Format: date-time */
@@ -1800,6 +1802,8 @@ export interface components {
             deliveryStatus: components["schemas"]["DeliveryStatusInput"] | null;
             failCode: string | null;
             isOwn: boolean;
+            localFilePath: string | null;
+            mediaUrl: string | null;
             msgId: string | null;
             senderPlatformUserId: string;
             /** Format: date-time */

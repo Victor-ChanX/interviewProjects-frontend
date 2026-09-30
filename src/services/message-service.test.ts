@@ -73,6 +73,8 @@ describe("messageKey", () => {
     sentAt: "2026-09-30T00:00:00.000Z",
     deliveryStatus: null,
     failCode: null,
+    mediaUrl: null,
+    localFilePath: null,
   };
 
   it("prefers clientMsgId, then msgId, then sender + sentAt", () => {
