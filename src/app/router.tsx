@@ -23,6 +23,11 @@ export const router = createBrowserRouter([
         path: "groups/:groupId",
         lazy: () => import("./groups/[groupId]/page"),
       },
+      // 前端 #5：agent run 详情（步骤表 + 协议错误步的原始响应）
+      {
+        path: "agent-runs/:runId",
+        lazy: () => import("./agent-runs/[runId]/page"),
+      },
       { path: "*", lazy: () => import("./not-found") },
     ],
   },

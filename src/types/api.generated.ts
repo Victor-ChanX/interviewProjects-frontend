@@ -170,7 +170,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 用户名密码登录，签发 access token */
+        /** 用户名密码登录，签发 access token；refresh token 只进 HttpOnly cookie */
         post: {
             parameters: {
                 query?: never;
@@ -186,6 +186,78 @@ export interface paths {
                     };
                 };
             };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LoginResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 登出：整个会话族作废，同一 access token 立即失效，清 refresh cookie */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LogoutResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 用 HttpOnly cookie 里的 refresh token 换新 access token（轮换；旧 token 复用则整个会话作废） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
             responses: {
                 /** @description Default Response */
                 200: {
@@ -372,6 +444,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/groups/{id}/leave-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 群里所有服务账号退群：非群主先、群主最后（异步 job，202） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LeaveAllResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/groups/{id}/messages": {
         parameters: {
             query?: never;
@@ -458,6 +568,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/groups/{id}/sequence-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 在某群启动一次序列运行（预检取值链；同群至多一个 running；201 后由 worker 按排期发送） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        sequenceId: string;
+                        /** @default {} */
+                        stepVars?: {
+                            [key: string]: {
+                                [key: string]: string;
+                            };
+                        };
+                        /** @default {} */
+                        vars?: {
+                            [key: string]: string;
+                        };
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SequenceRunStarted"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -526,6 +690,104 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sequence-runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 某次序列运行的状态与每步的取值 / 排期 / 发送结果 */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SequenceRunRead"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sequences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出全部序列定义（按创建顺序） */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SequenceList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** 创建序列定义（题目 B1 的 JSON） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SequenceDefinitionInput"];
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SequenceCreated"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -816,11 +1078,25 @@ export interface components {
         JobStepKind: "create" | "invite" | "join" | "promote" | "leave";
         /** @enum {string} */
         JobStepKindInput: "create" | "invite" | "join" | "promote" | "leave";
+        LeaveAllResponse: {
+            jobId: string;
+        };
+        LeaveAllResponseInput: {
+            jobId: string;
+        };
         LoginResponse: {
             accessToken: string;
         };
         LoginResponseInput: {
             accessToken: string;
+        };
+        LogoutResponse: {
+            /** @constant */
+            ok: true;
+        };
+        LogoutResponseInput: {
+            /** @constant */
+            ok: true;
         };
         /** @enum {string} */
         MemberRole: "creator" | "admin" | "member";
@@ -862,6 +1138,130 @@ export interface components {
         SendResponseInput: {
             clientMsgId: string;
         };
+        /** @enum {string} */
+        SequenceAccountRole: "admin" | "member";
+        /** @enum {string} */
+        SequenceAccountRoleInput: "admin" | "member";
+        SequenceCreated: {
+            id: string;
+        };
+        SequenceCreatedInput: {
+            id: string;
+        };
+        SequenceDefinition: {
+            name: string;
+            steps: components["schemas"]["SequenceStepDefinition"][];
+        };
+        SequenceDefinitionInput: {
+            name: string;
+            steps: components["schemas"]["SequenceStepDefinitionInput"][];
+        };
+        SequenceList: {
+            items: components["schemas"]["SequenceRead"][];
+            total: number;
+        };
+        SequenceListInput: {
+            items: components["schemas"]["SequenceReadInput"][];
+            total: number;
+        };
+        SequenceRead: {
+            /** Format: date-time */
+            createdAt: string;
+            id: string;
+            name: string;
+            steps: components["schemas"]["SequenceStepDefinition"][];
+        };
+        SequenceReadInput: {
+            /** Format: date-time */
+            createdAt: string;
+            id: string;
+            name: string;
+            steps: components["schemas"]["SequenceStepDefinitionInput"][];
+        };
+        SequenceRunRead: {
+            /** Format: date-time */
+            createdAt: string;
+            currentStepIndex: number;
+            finishedAt: string | null;
+            groupId: string;
+            id: string;
+            sequenceId: string;
+            status: components["schemas"]["SequenceRunStatus"];
+            steps: components["schemas"]["SequenceRunStepRead"][];
+        };
+        SequenceRunReadInput: {
+            /** Format: date-time */
+            createdAt: string;
+            currentStepIndex: number;
+            finishedAt: string | null;
+            groupId: string;
+            id: string;
+            sequenceId: string;
+            status: components["schemas"]["SequenceRunStatusInput"];
+            steps: components["schemas"]["SequenceRunStepReadInput"][];
+        };
+        SequenceRunStarted: {
+            runId: string;
+        };
+        SequenceRunStartedInput: {
+            runId: string;
+        };
+        /** @enum {string} */
+        SequenceRunStatus: "running" | "finished" | "failed" | "stopped";
+        /** @enum {string} */
+        SequenceRunStatusInput: "running" | "finished" | "failed" | "stopped";
+        SequenceRunStepRead: {
+            accountId: string | null;
+            accountRole: components["schemas"]["SequenceAccountRole"];
+            clientMsgId: string | null;
+            delaySeconds: number;
+            failCode: string | null;
+            index: number;
+            resolvedVars: {
+                [key: string]: string;
+            };
+            scheduledAt: string | null;
+            sentAt: string | null;
+            skippedAt: string | null;
+            status: components["schemas"]["SequenceStepStatus"];
+            varSources: {
+                [key: string]: string;
+            };
+        };
+        SequenceRunStepReadInput: {
+            accountId: string | null;
+            accountRole: components["schemas"]["SequenceAccountRoleInput"];
+            clientMsgId: string | null;
+            delaySeconds: number;
+            failCode: string | null;
+            index: number;
+            resolvedVars: {
+                [key: string]: string;
+            };
+            scheduledAt: string | null;
+            sentAt: string | null;
+            skippedAt: string | null;
+            status: components["schemas"]["SequenceStepStatusInput"];
+            varSources: {
+                [key: string]: string;
+            };
+        };
+        SequenceStepDefinition: {
+            accountRole: components["schemas"]["SequenceAccountRole"];
+            delaySeconds: number;
+            index: number;
+            text: string;
+        };
+        SequenceStepDefinitionInput: {
+            accountRole: components["schemas"]["SequenceAccountRoleInput"];
+            delaySeconds: number;
+            index: number;
+            text: string;
+        };
+        /** @enum {string} */
+        SequenceStepStatus: "pending" | "accepted" | "sent" | "skipped" | "failed";
+        /** @enum {string} */
+        SequenceStepStatusInput: "pending" | "accepted" | "sent" | "skipped" | "failed";
     };
     responses: never;
     parameters: never;

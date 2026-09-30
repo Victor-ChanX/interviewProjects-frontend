@@ -16,6 +16,13 @@ export type AgentRunStatus = components["schemas"]["AgentRunStatus"];
 
 export type AgentRunEndReason = components["schemas"]["AgentRunEndReason"];
 
+/** 详情里的一步（前端 #5）：协议错误步的 toolUseId / name / input 为 null，rawResponse 是截到 2KB 的原始响应体。 */
+export type AgentStepRead = components["schemas"]["AgentStepRead"];
+
+export type AgentStepKind = components["schemas"]["AgentStepKind"];
+
+export type AuditVerdict = components["schemas"]["AuditVerdict"];
+
 const AGENT_RUNS_URL = "/api/agent-runs";
 
 // /api/groups 这个前缀的 owner 是 group-service（duplicate-endpoint-literal），这里只拼子路径。

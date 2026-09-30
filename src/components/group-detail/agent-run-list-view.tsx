@@ -1,47 +1,23 @@
 // 某群的 agent run 列表：纯展示，最新在前。blocked（审计拦下）醒目：顶部 Alert + 行高亮；
-// 当前进行中的 run（activeRunId）行加左侧强调。原生 <table>：共享 DataTable 尚未落地。
+// 当前进行中的 run（activeRunId）行加左侧强调；run id 链接到详情页（前端 #5）。原生 <table>：共享 DataTable 尚未落地。
+// 状态 / 结束原因的文案与徽标样式在 @/lib/agent-run-labels（与详情页共用）。
 
 import { AlertTriangle } from "lucide-react";
+import { Link } from "react-router";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { QueryError } from "@/components/ui-atoms/query-error";
+import {
+  AGENT_RUN_END_REASON_LABELS,
+  AGENT_RUN_STATUS_CLASS,
+  AGENT_RUN_STATUS_LABELS,
+} from "@/lib/agent-run-labels";
 import { formatDateTime } from "@/lib/format-date";
 import { getErrorMessage } from "@/lib/get-error-message";
 import { cn } from "@/lib/utils";
-import type {
-  AgentRunEndReason,
-  AgentRunStatus,
-} from "@/services/agent-run-service";
 
 import type { AgentRunListViewProps } from "./types";
-
-const STATUS_LABELS: Readonly<Record<AgentRunStatus, string>> = {
-  running: "运行中",
-  finished: "已完成",
-  failed: "失败",
-  blocked: "已拦截",
-  cancelled: "已取消",
-};
-
-/** 状态 → 徽标样式：全部走主题 token。 */
-const STATUS_CLASS: Readonly<Record<AgentRunStatus, string>> = {
-  running: "border-warning/40 bg-warning/15 text-warning",
-  finished: "border-success/40 bg-success/15 text-success",
-  failed: "border-destructive/40 bg-destructive/15 text-destructive",
-  blocked:
-    "border-destructive bg-destructive/25 font-semibold text-destructive",
-  cancelled: "border-border bg-muted text-muted-foreground",
-};
-
-const END_REASON_LABELS: Readonly<Record<AgentRunEndReason, string>> = {
-  final: "正常结束",
-  budget_exhausted: "预算耗尽",
-  wall_clock: "超时",
-  protocol_errors: "协议错误过多",
-  audit_blocked: "审计拦截",
-  cancelled: "被取消",
-};
 
 const HEADERS = [
   "Run ID",
@@ -119,7 +95,12 @@ export function AgentRunListView({
                 })}
               >
                 <td className="px-3 py-2 font-mono text-xs">
-                  {run.id}
+                  <Link
+                    to={`/agent-runs/${encodeURIComponent(run.id)}`}
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {run.id}
+                  </Link>
                   {run.id === activeRunId ? (
                     <span className="ml-1 font-sans text-muted-foreground">
                       （进行中）
@@ -129,14 +110,17 @@ export function AgentRunListView({
                 <td className="px-3 py-2">
                   <Badge
                     variant="outline"
-                    className={cn("font-medium", STATUS_CLASS[run.status])}
+                    className={cn(
+                      "font-medium",
+                      AGENT_RUN_STATUS_CLASS[run.status],
+                    )}
                   >
-                    {STATUS_LABELS[run.status]}
+                    {AGENT_RUN_STATUS_LABELS[run.status]}
                   </Badge>
                 </td>
                 <td className="px-3 py-2">
                   {run.endReason ? (
-                    END_REASON_LABELS[run.endReason]
+                    AGENT_RUN_END_REASON_LABELS[run.endReason]
                   ) : (
                     <span className="text-muted-foreground">-</span>
                   )}
