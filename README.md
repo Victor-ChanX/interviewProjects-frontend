@@ -42,6 +42,7 @@ npm run build           # tsc --noEmit && vite build（Vite 本身不做类型�
 npm run lint            # eslint（含分层约束）；npm run format:check 查 Prettier
 ```
 
+CI 跑 `tsc --noEmit`、`npm run lint`、`npm run format:check`、`npm run test:coverage`、`npm run build`，以及上面的 e2e。
 
 ## 端到端（Playwright，前端 #8 / 题目 C3）
 
@@ -69,9 +70,9 @@ npm run e2e        # = playwright test；首次先 npx playwright install chromi
   复用手动起的后端时账号可能已经 online，会先标记离线再 connect。
 - **失败排查**：`test-results/` 里有失败用例的截图与 trace（`npx playwright show-trace <trace.zip>`），
   CI 另出 `playwright-report/`；两者都在 `.gitignore`。
-- **CI 接入**：公开 CI 要同时 checkout 后端仓到并排目录（`actions/checkout` 加 `path` + `repository`）、起一个
-  Postgres service（`E2E_DATABASE_URL` 指过去，库名含 `e2e`）、两边都 `npm ci`，再 `npx playwright install --with-deps chromium`
-  → `npm run e2e`。现在的 `.github/workflows/ci.yml` 还没接这一步。
+- **CI**：`.github/workflows/ci.yml` 的 e2e 任务同时 checkout 后端仓到并排目录、起一个 Postgres service
+  （`E2E_DATABASE_URL` 指过去，库名含 `e2e`）、两边都 `npm ci`，再 `npx playwright install --with-deps chromium` → `npm run e2e`；
+  失败时上传 `playwright-report/` 与 `test-results/`。
 
 ## 部署（Docker / Dokploy）
 
