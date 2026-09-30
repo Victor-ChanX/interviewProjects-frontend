@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // Vite 构建配置。类型检查不在这里：Vite 只用 esbuild 剥类型，`npm run build` 先跑
-// `tsc --noEmit`（见 package.json）。vitest 的配置单独放 vitest.config.mts（`test` 段不写在
+// `tsc --noEmit`（见 package.json）。vitest 的配置单独放 vitest.config.mts（`test` 段不写在这里）。
 export default defineConfig({
   // tailwind 4 走 Vite 插件，不需要 postcss.config；globals.css 里 `@import "tailwindcss";` 即可。
   plugins: [react(), tailwindcss()],
@@ -25,7 +25,7 @@ export default defineConfig({
       : undefined,
   },
   build: {
-    // 产物目录 dist（.gitignore、.prettierignore、eslint globalIgnores、
+    // 产物目录 dist（.gitignore、.prettierignore、eslint globalIgnores 都按这个名字跳过）。
     outDir: "dist",
   },
 });
