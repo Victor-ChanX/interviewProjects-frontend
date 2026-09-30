@@ -42,10 +42,22 @@ npm run e2e        # = playwright test；首次先 npx playwright install chromi
   Postgres service（`E2E_DATABASE_URL` 指过去，库名含 `e2e`）、两边都 `npm ci`，再 `npx playwright install --with-deps chromium`
   → `npm run e2e`。现在的 `.github/workflows/ci.yml` 还没接这一步。
 
-## 部署（Docker）
+## 部署（Docker / Dokploy）
 
-`Dockerfile` 构建出一个 nginx 镜像：托管 `npm run build` 的静态页，`/api` 与 `/ws` 反代到
-`BACKEND_UPSTREAM`（默认 `backend:8000`），配置在 [`deploy/nginx.conf.template`](deploy/nginx.conf.template)。
-一般不单独部署它：后端仓的 [docker-compose.yml](https://github.com/Victor-ChanX/interviewProjects-backend/blob/main/docker-compose.yml)
-直接从本仓 GitHub 地址构建它，与后端、模拟器、数据库一起拉起；Dokploy 的步骤见后端仓的
-[部署文档](https://github.com/Victor-ChanX/interviewProjects-backend/blob/main/docs/deploy.md)。
+`Dockerfile` 构建出一个 nginx 镜像：托管 `npm run build` 的静态页，并把 `/api`、`/ws` 反代到后端
+（配置在 [`deploy/nginx.conf.template`](deploy/nginx.conf.template)）。浏览器只和本站同源通信，
+所以后端不用配 CORS，登录用的 refresh cookie 也落在本站域名下。
+
+唯一的运行时变量是 `BACKEND_URL`：后端的地址，只写协议和主机（如 `https://api.example.com`，不带路径和末尾 `/`）。
+没设或格式不对时容器启动即失败，日志里说明原因。
+
+在 Dokploy 上：
+
+1. 先按后端仓的[部署文档](https://github.com/Victor-ChanX/interviewProjects-backend/blob/main/docs/deploy.md)
+   部署后端，并给后端配好域名。
+2. Create Service → Application，仓库选本仓、分支 `main`，Build Type 选 Dockerfile（路径 `./Dockerfile`）。
+3. Environment 填 `BACKEND_URL=https://<后端域名>`。
+4. Domains 加前端域名，Container Port `80`，HTTPS 选 Let's Encrypt；Deploy。
+
+本机：`docker build -t gmp-web . && docker run --rm -p 8080:80 -e BACKEND_URL=http://host.docker.internal:8000 gmp-web`，
+打开 http://localhost:8080 。
