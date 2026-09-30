@@ -34,3 +34,43 @@ export function shouldShowFailCode(
 ): boolean {
   return Boolean(failCode) && (status === "failed" || status === "cancelled");
 }
+
+/** 平台用户 ID → 服务账号 ID（acc-1），由账号列表建；不在表里的是外部成员。 */
+export function buildSenderNames(
+  accounts: readonly { id: string; platformUserId: string | null }[],
+): ReadonlyMap<string, string> {
+  const names = new Map<string, string>();
+
+  for (const account of accounts)
+    if (account.platformUserId) names.set(account.platformUserId, account.id);
+
+  return names;
+}
+
+/** 时间线发送人：我方账号显示账号 ID（头像取「A」+ 编号），外部成员显示平台用户 ID。 */
+export function senderDisplay(
+  platformUserId: string,
+  names: ReadonlyMap<string, string>,
+): { name: string; initials: string } {
+  const accountId = names.get(platformUserId);
+
+  if (accountId) {
+    const suffix = accountId.replace(/^acc-/, "");
+
+    return {
+      name: accountId,
+      initials:
+        suffix === accountId
+          ? accountId.slice(0, 2).toUpperCase()
+          : `A${suffix}`.slice(0, 3),
+    };
+  }
+
+  return {
+    name: platformUserId,
+    initials: platformUserId
+      .replace(/^(pu_|ext-|u-)/, "")
+      .slice(0, 2)
+      .toUpperCase(),
+  };
+}

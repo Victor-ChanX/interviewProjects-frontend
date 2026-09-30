@@ -14,6 +14,7 @@ import { getErrorMessage } from "@/lib/get-error-message";
 import {
   DELIVERY_STATUS_LABELS,
   DELIVERY_STATUS_TONE,
+  senderDisplay,
   shouldShowFailCode,
 } from "@/lib/message-labels";
 import { cn } from "@/lib/utils";
@@ -43,8 +44,15 @@ function DeliveryBadge({ message }: { message: MessageRead }) {
   );
 }
 
-function MessageRow({ message }: { message: MessageRead }) {
+function MessageRow({
+  message,
+  senderNames,
+}: {
+  message: MessageRead;
+  senderNames: ReadonlyMap<string, string>;
+}) {
   const own = message.isOwn;
+  const sender = senderDisplay(message.senderPlatformUserId, senderNames);
 
   return (
     <li className={cn("flex gap-2.5", own ? "flex-row-reverse" : "flex-row")}>
@@ -55,10 +63,7 @@ function MessageRow({ message }: { message: MessageRead }) {
           own ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
         )}
       >
-        {message.senderPlatformUserId
-          .replace(/^(pu_|ext-|u-)/, "")
-          .slice(0, 2)
-          .toUpperCase()}
+        {sender.initials}
       </span>
       <div
         className={cn("flex max-w-[78%] min-w-0 flex-col gap-1", {
@@ -67,7 +72,9 @@ function MessageRow({ message }: { message: MessageRead }) {
         })}
       >
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="font-mono">{message.senderPlatformUserId}</span>
+          <span className="font-mono" title={message.senderPlatformUserId}>
+            {sender.name}
+          </span>
           <time dateTime={message.sentAt}>
             {formatDateTime(message.sentAt)}
           </time>
@@ -91,6 +98,7 @@ function MessageRow({ message }: { message: MessageRead }) {
 
 export function MessageTimelineView({
   messages,
+  senderNames,
   loading,
   error,
   retrying,
@@ -156,7 +164,11 @@ export function MessageTimelineView({
           <ol className="flex flex-col gap-4">
             {/* 倒序 → 正序：最旧在上、最新在下。 */}
             {[...messages].reverse().map((message) => (
-              <MessageRow key={messageKey(message)} message={message} />
+              <MessageRow
+                key={messageKey(message)}
+                message={message}
+                senderNames={senderNames}
+              />
             ))}
           </ol>
         )}

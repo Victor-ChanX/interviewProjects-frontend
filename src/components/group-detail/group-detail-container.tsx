@@ -24,6 +24,7 @@ import { useGroupTab } from "./use-group-tab";
 import { useLeaveAll } from "./use-leave-all";
 import { useMessageTimeline } from "./use-message-timeline";
 import { useSendMessage } from "./use-send-message";
+import { useSenderNames } from "./use-sender-names";
 
 const SETTING_TOAST: Readonly<Record<GroupSetting, string>> = {
   agentEnabled: "Agent 自动回复",
@@ -43,6 +44,7 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
   const [tab, setTab] = useGroupTab();
   const detail = useGroupDetail(groupId);
   const timeline = useMessageTimeline(groupId);
+  const senderNames = useSenderNames();
   const agentRuns = useAgentRuns(groupId);
   const members = detail.group?.members ?? NO_MEMBERS;
   const send = useSendMessage({ groupId, members, enabled: canWrite });
@@ -140,6 +142,7 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
       members={{ members }}
       timeline={{
         messages: timeline.messages,
+        senderNames,
         loading: timeline.loading,
         error: timeline.error,
         retrying: timeline.retrying,

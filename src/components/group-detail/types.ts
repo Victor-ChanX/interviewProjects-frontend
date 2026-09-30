@@ -19,6 +19,8 @@ export interface MemberTableViewProps {
 export interface MessageTimelineViewProps {
   /** 全部已加载的消息，sentAt 倒序（最新在前）；渲染方向由 view 决定。 */
   messages: MessageRead[];
+  /** 平台用户 ID → 服务账号 ID：我方账号发的消息显示成 acc-1 而不是 pu_xxx。 */
+  senderNames: ReadonlyMap<string, string>;
   loading: boolean;
   error: unknown;
   retrying: boolean;
