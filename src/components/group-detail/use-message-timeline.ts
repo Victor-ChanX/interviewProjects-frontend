@@ -1,7 +1,10 @@
 // 群消息时间线：游标分页（useInfiniteQuery，「加载更早」用上一页的 nextCursor）+ 实时追加并存。
 //
-// WS `message` 事件只带 { groupId, msgId, isOwn, clientMsgId?, deliveryStatus?, failCode? }，没有消息体：
-// - 自己的消息（带 clientMsgId）且缓存里已有这一行 → 就地写 deliveryStatus / failCode / msgId（setQueryData 函数式更新）。
+// WS `message` 事件只带 { groupId, msgId, isOwn, clientMsgId?, deliveryStatus?, failCode?, sentAt? }，没有消息体：
+// - 自己的消息（带 clientMsgId）且缓存里已有这一行 → 就地写 deliveryStatus / failCode / msgId（setQueryData 函数式更新），
+//   带 sentAt 时按新时刻挪位置（受理时刻 → 网关时刻，前端 #17）；不带时位置等下一次最新页补拉纠正。
+//   这时若补拉请求在途（请求发出时这一行还是旧状态），标记 again：它回来后再拉一轮，把这期间的变化带回来；
+//   合并时也不让旧快照把 sent / failed / cancelled 退回去（timeline-cache 的 mergeRow）。
 // - 其余（别人的新消息、或自己的消息还没进缓存）→ 从最新页起往前翻（before = 上一页的 nextCursor），
 //   直到拉回的页接上缓存（timeline-cache 的 catchUpAnchor / reachesAnchor）—— 断线期间的新消息
 //   超过一页时只拉最新一页，中间会留下「加载更早」也补不回来的空洞（前端 #14）。拉回的全部行按 key
@@ -9,7 +12,7 @@
 //   不用 invalidateQueries：TanStack v5 会把已加载的每一页顺序重拉一遍（用户翻到第十页时十页全刷）。
 //   请求失败、或翻了 MAX_CATCH_UP_PAGES 页还没接上，才退回 invalidate（按页从最新重拉，同样没有空洞）。
 //   缓存里还没有数据（old === undefined）时不造：查询自己会拉。
-// 同一时刻多条事件只发一次请求：进行中的标记 again，完成后再拉一次兜住这期间的变化。
+// 同一时刻多条事件只发一次请求：进行中的标记 again，完成后再拉一次兜住这期间的变化（就地写投递状态的事件也算）。
 // 首页请求进行中到达的事件（首屏加载、invalidate 后的重拉）：那次请求可能早于这条消息落库，
 // 缓存里又还没有数据可并 —— 记一笔，首页请求回来后再拉一次首页（前端 #14，headFetches）。
 // 缓存里已有数据、但正在请求（「加载更早」、invalidate 后的整体重拉）时，这次请求结束会把开始时的
@@ -207,6 +210,12 @@ export function useMessageTimeline(groupId: string) {
 
       if (!current) return;
 
+      // 换了群就换一份状态；同群复用，保证单飞。
+      if (refreshState.current?.groupId !== groupId)
+        refreshState.current = { groupId, inFlight: false, again: false };
+
+      const state = refreshState.current;
+
       // 缓存里已有这一行（自己的消息）：就地写投递状态。
       if (applyDeliveryUpdate(current, payload)) {
         updateQueryData<TimelineData>(
@@ -215,14 +224,13 @@ export function useMessageTimeline(groupId: string) {
           (old) => applyDeliveryUpdate(old, payload) ?? old,
         );
 
+        // 在途的补拉拿的是这次更新之前的快照：回来后再拉一轮（前端 #17）。
+        if (state.inFlight) state.again = true;
+
         return;
       }
 
-      // 换了群就换一份状态；同群复用，保证单飞。
-      if (refreshState.current?.groupId !== groupId)
-        refreshState.current = { groupId, inFlight: false, again: false };
-
-      void refreshHeadPage(queryClient, refreshState.current);
+      void refreshHeadPage(queryClient, state);
     },
     [groupId, queryClient],
   );

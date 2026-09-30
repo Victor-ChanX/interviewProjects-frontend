@@ -1,7 +1,11 @@
 // 时间线缓存的纯函数（游标分页 + 实时追加并存，frontend-realtime-events「列表」）。
 // 缓存形状是 useInfiniteQuery 的 InfiniteData<MessagePage>：pages[0] 是最新页，每页 items 按 sentAt 倒序。
-// 规则：新项只进 pages[0] 头部（按 sentAt 倒序找位置），pageParams 与旧页一律不动 —— 游标是「比某项更早」，
-// 后来的新项不影响旧游标；更新按 key 在每一页就地替换；全程按 messageKey 去重。
+// 规则：新项只进 pages[0] 头部（按 sentAt 倒序找位置），pageParams 与游标一律不动 —— 游标是「比某项更早」，
+// 后来的新项不影响旧游标；全程按 messageKey 去重。
+// 顺序（前端 #17）：后端按 (sentAt desc, id desc) 排，id 不下发，同一时刻的先后只能照搬后端给的顺序。
+// 自己的消息排队时 sentAt 是受理时刻、发出后变成网关时刻（往后挪），所以 sentAt 一变就要重排：
+// 合并最新页时整段按「最新页的顺序为准」重排 pages[0]，事件带 sentAt 时就地改并重排所在页，
+// 拍平时再按 sentAt 稳定排一遍兜住跨页的情况。
 // 断线补齐：从最新页往前翻，直到拉回的页接上缓存（catchUpAnchor / reachesAnchor），再一次性并进 pages[0]。
 // 这里不碰 React / queryClient，由 use-message-timeline.ts 用 setQueryData 的函数式更新套上。
 
@@ -9,6 +13,7 @@ import type { InfiniteData } from "@tanstack/react-query";
 
 import type { MessageEventPayload } from "@/lib/ws";
 import {
+  type DeliveryStatus,
   messageKey,
   type MessagePage,
   type MessageRead,
@@ -27,6 +32,42 @@ function insertByTime(
   if (at === -1) return [...items, message];
 
   return [...items.slice(0, at), message, ...items.slice(at)];
+}
+
+/** 按 sentAt 倒序排（ISO 字符串直接比）。sort 是稳定的：同一时刻保持传入的相对顺序。 */
+function sortByTime(items: MessageRead[]): MessageRead[] {
+  return [...items].sort((a, b) =>
+    a.sentAt === b.sentAt ? 0 : a.sentAt < b.sentAt ? 1 : -1,
+  );
+}
+
+/**
+ * 投递状态的档位（后端 outbox 的状态机）：queued / accepted / unknown 是中间态、彼此可来回
+ * （unknown 确认没发出会回到 queued）；cancelled 之后仍可能落地成 sent；sent / failed 不再变。
+ */
+function settledRank(status: DeliveryStatus | null): number {
+  if (status === "sent" || status === "failed") return 2;
+
+  if (status === "cancelled") return 1;
+
+  return 0;
+}
+
+/**
+ * 最新页里的一行替换缓存里的同一行。最新页的档位比缓存低，说明这份快照早于缓存里那次就地更新
+ * （请求在途时 WS 事件先到了，前端 #17）：投递相关的字段留缓存的，别把 sent 退回 accepted。
+ */
+function mergeRow(cached: MessageRead, fresh: MessageRead): MessageRead {
+  if (settledRank(fresh.deliveryStatus) >= settledRank(cached.deliveryStatus))
+    return fresh;
+
+  return {
+    ...fresh,
+    msgId: cached.msgId ?? fresh.msgId,
+    deliveryStatus: cached.deliveryStatus,
+    failCode: cached.failCode,
+    sentAt: cached.sentAt,
+  };
 }
 
 function replacePage(
@@ -51,7 +92,8 @@ export function hasMessage(data: TimelineData, key: string): boolean {
 }
 
 /**
- * `message` 事件带 clientMsgId 时，把投递状态（与发出后才有的 msgId）就地写进已有的行。
+ * `message` 事件带 clientMsgId 时，把投递状态（与发出后才有的 msgId）就地写进已有的行；
+ * 事件带了 sentAt 且变了（受理时刻 → 网关时刻），所在页按新时刻重排。
  * 缓存里没有这一行返回 null，调用方改走「刷新最新页」。
  */
 export function applyDeliveryUpdate(
@@ -64,59 +106,74 @@ export function applyDeliveryUpdate(
 
   return {
     ...data,
-    pages: data.pages.map((page) => ({
-      ...page,
-      items: page.items.map((item) =>
-        messageKey(item) === key
-          ? {
-              ...item,
-              msgId: payload.msgId ?? item.msgId,
-              deliveryStatus:
-                payload.deliveryStatus === undefined
-                  ? item.deliveryStatus
-                  : payload.deliveryStatus,
-              failCode:
-                payload.failCode === undefined
-                  ? item.failCode
-                  : payload.failCode,
-            }
-          : item,
-      ),
-    })),
+    pages: data.pages.map((page) => {
+      let moved = false;
+      const items = page.items.map((item) => {
+        if (messageKey(item) !== key) return item;
+
+        const sentAt = payload.sentAt ?? item.sentAt;
+
+        if (sentAt !== item.sentAt) moved = true;
+
+        return {
+          ...item,
+          msgId: payload.msgId ?? item.msgId,
+          deliveryStatus:
+            payload.deliveryStatus === undefined
+              ? item.deliveryStatus
+              : payload.deliveryStatus,
+          failCode:
+            payload.failCode === undefined ? item.failCode : payload.failCode,
+          sentAt,
+        };
+      });
+
+      return { ...page, items: moved ? sortByTime(items) : items };
+    }),
   };
 }
 
 /**
- * 把重新拉回的最新页并进缓存：已有的行（任一页）整行替换成新数据；没见过的行插到 pages[0]
- * 按 sentAt 倒序的位置。不重不漏，旧页与游标不动。
+ * 把重新拉回的最新一段（从最新往前、连续的若干页，后端顺序）并进缓存：这一段里的行全部归到 pages[0]
+ * （已有的行按 mergeRow 替换、从旧页上摘掉 —— sentAt 变过的自己消息可能挂在旧页上），再和 pages[0]
+ * 里不在这一段的行（例如刚乐观插入的）一起按 sentAt 倒序稳定排序：这一段放前面，同一时刻就照搬后端的顺序。
+ * 不重不漏，游标不动。
  */
 export function mergeHeadPage(
   data: TimelineData,
   fresh: MessageRead[],
 ): TimelineData {
-  const byKey = new Map(fresh.map((item) => [messageKey(item), item]));
-  let next: TimelineData = {
-    ...data,
-    pages: data.pages.map((page) => ({
-      ...page,
-      items: page.items.map((item) => byKey.get(messageKey(item)) ?? item),
-    })),
-  };
-  const head = next.pages[0];
+  if (!data.pages[0]) return data;
 
-  if (!head) return next;
+  const cached = new Map(
+    flattenTimeline(data).map((item) => [messageKey(item), item]),
+  );
+  const merged = new Map<string, MessageRead>();
 
-  let items = head.items;
+  // 跨页翻的时候同一行可能出现两次（翻页途中 sentAt 变了）：留较新一页的那份。
+  for (const item of fresh) {
+    const key = messageKey(item);
 
-  // fresh 本身是倒序的，从最旧的开始插，保证同时刻的相对顺序与后端一致。
-  for (const item of [...fresh].reverse()) {
-    if (hasMessage(next, messageKey(item))) continue;
+    if (merged.has(key)) continue;
 
-    items = insertByTime(items, item);
-    next = replacePage(next, 0, items);
+    const old = cached.get(key);
+
+    merged.set(key, old ? mergeRow(old, item) : item);
   }
 
-  return next;
+  const notFresh = (items: MessageRead[]) =>
+    items.filter((item) => !merged.has(messageKey(item)));
+
+  return {
+    ...data,
+    pages: data.pages.map((page, i) => ({
+      ...page,
+      items:
+        i === 0
+          ? sortByTime([...merged.values(), ...notFresh(page.items)])
+          : notFresh(page.items),
+    })),
+  };
 }
 
 /** 发送成功（202）后乐观插入一条自己的 queued 消息；同 key 已在缓存里就原样返回。 */
@@ -181,8 +238,9 @@ export function reachesAnchor(
 }
 
 /**
- * 全部页拍平（仍是 sentAt 倒序）；view 决定渲染方向。按 messageKey 跨页去重、留较新一页的那一行：
+ * 全部页拍平，按 sentAt 倒序；view 决定渲染方向。按 messageKey 跨页去重、留较新一页的那一行：
  * 自己消息的 sentAt 从受理时刻变成网关时刻后，同一条可能既在旧页（受理时刻拉到的）又在最新页。
+ * 去重后再稳定排一遍：sentAt 就地变新的行可能还挂在旧页上（前端 #17），同一时刻保持页内 / 页间原顺序。
  */
 export function flattenTimeline(data: TimelineData | undefined): MessageRead[] {
   const seen = new Set<string>();
@@ -199,5 +257,5 @@ export function flattenTimeline(data: TimelineData | undefined): MessageRead[] {
     }
   }
 
-  return out;
+  return sortByTime(out);
 }

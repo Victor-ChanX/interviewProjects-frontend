@@ -333,6 +333,108 @@ describe("useMessageTimeline", () => {
     expect(listMessages).toHaveBeenCalledTimes(2);
   });
 
+  // 前端 #17：别人的消息触发补拉，请求在途时自己消息的 sent 事件到了并就地写上；补拉结果（发出请求时
+  // 还是 accepted）回来后不能把状态退回去，而且要再拉一次最新页把这期间的变化（发出时刻）带回来。
+  it("does not let an in-flight catch-up overwrite a delivery update that arrived meanwhile", async () => {
+    const m4 = msg({ msgId: "m4", sentAt: "2026-09-30T10:04:00.000Z" });
+    const ownSent = {
+      ...own,
+      msgId: "m9",
+      deliveryStatus: "sent" as const,
+      sentAt: "2026-09-30T10:05:00.000Z",
+    };
+    let releaseCatchUp: (page: MessagePage) => void = () => {};
+
+    let releaseAgain: (page: MessagePage) => void = () => {};
+
+    listMessages
+      .mockResolvedValueOnce(FIRST_PAGE)
+      .mockImplementationOnce(
+        () =>
+          new Promise<MessagePage>((resolve) => {
+            releaseCatchUp = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<MessagePage>((resolve) => {
+            releaseAgain = resolve;
+          }),
+      );
+
+    const { result } = setup();
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    push("message", { groupId: "g1", msgId: "m4", isOwn: false });
+    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(2));
+
+    // 事件不带 sentAt（后端补上之前的形状）：只能先就地写状态，位置等最新页
+    push("message", {
+      groupId: "g1",
+      msgId: "m9",
+      isOwn: true,
+      clientMsgId: "c1",
+      deliveryStatus: "sent",
+      failCode: null,
+    });
+
+    await act(async () => {
+      releaseCatchUp({
+        items: [m4, { ...own, deliveryStatus: "accepted" }, m2],
+        nextCursor: "cur1",
+      });
+    });
+
+    // 旧快照已并进来、第二轮还没回来：状态仍是 sent，m4 进来了
+    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(3));
+    await waitFor(() =>
+      expect(keys(result.current.messages)).toEqual(["m4", "c1", "m2"]),
+    );
+    expect(result.current.messages[1]).toMatchObject({
+      deliveryStatus: "sent",
+      msgId: "m9",
+    });
+
+    await act(async () => {
+      releaseAgain({ items: [ownSent, m4, m2], nextCursor: "cur1" });
+    });
+
+    await waitFor(() =>
+      expect(keys(result.current.messages)).toEqual(["c1", "m4", "m2"]),
+    );
+    expect(result.current.messages[0]).toEqual(ownSent);
+    expect(listMessages).toHaveBeenCalledTimes(3);
+  });
+
+  it("re-sorts an own message by the sentAt carried in its delivery event", async () => {
+    const m4 = msg({ msgId: "m4", sentAt: "2026-09-30T10:04:00.000Z" });
+
+    listMessages.mockResolvedValueOnce({
+      items: [m4, own, m2],
+      nextCursor: "cur1",
+    });
+
+    const { result } = setup();
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    push("message", {
+      groupId: "g1",
+      msgId: "m9",
+      isOwn: true,
+      clientMsgId: "c1",
+      deliveryStatus: "sent",
+      failCode: null,
+      sentAt: "2026-09-30T10:05:00.000Z",
+    });
+
+    await waitFor(() =>
+      expect(keys(result.current.messages)).toEqual(["c1", "m4", "m2"]),
+    );
+    expect(listMessages).toHaveBeenCalledTimes(1);
+  });
+
   it("ignores events of other groups", async () => {
     listMessages.mockResolvedValueOnce(FIRST_PAGE);
 

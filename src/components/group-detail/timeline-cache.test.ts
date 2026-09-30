@@ -86,6 +86,43 @@ describe("applyDeliveryUpdate", () => {
     });
   });
 
+  // 前端 #17：排队的消息先按受理时刻 T0 排着，发出时刻 T1 更晚 —— 事件带了 sentAt 就按它挪位置
+  it("moves the row to its new sentAt position when the event carries sentAt", () => {
+    const next = applyDeliveryUpdate(data, {
+      groupId: "g",
+      msgId: "m9",
+      isOwn: true,
+      clientMsgId: "c1",
+      deliveryStatus: "sent",
+      failCode: null,
+      sentAt: "2026-09-30T10:01:30.000Z",
+    });
+
+    expect(flattenTimeline(next ?? undefined)).toEqual([
+      m2,
+      {
+        ...own,
+        msgId: "m9",
+        deliveryStatus: "sent",
+        sentAt: "2026-09-30T10:01:30.000Z",
+      },
+      m1,
+    ]);
+  });
+
+  it("keeps the sentAt when the event has none", () => {
+    const next = applyDeliveryUpdate(data, {
+      groupId: "g",
+      msgId: "m9",
+      isOwn: true,
+      clientMsgId: "c1",
+      deliveryStatus: "sent",
+      failCode: null,
+    });
+
+    expect(next?.pages[0]?.items[0]?.sentAt).toBe(own.sentAt);
+  });
+
   it("returns null when the row is not cached or the event has no clientMsgId", () => {
     expect(
       applyDeliveryUpdate(data, {
@@ -130,6 +167,95 @@ describe("mergeHeadPage", () => {
       "m2",
       "m1",
     ]);
+  });
+
+  // 前端 #17：自己的消息在受理时刻 T0 排队、T1 才发出（比别人的消息都晚）—— 合并时原位替换不重排，
+  // 最新的一条显示在更早的消息下面。服务端顺序是 c1(10:01)、m2、m1。
+  it("re-sorts the head by sentAt when an own message's sentAt moved later", () => {
+    const ownQueued = { ...own, sentAt: "2026-09-30T10:00:00.000Z" };
+    const early = msg({ msgId: "e1", sentAt: "2026-09-30T10:00:30.000Z" });
+    const later = msg({ msgId: "e2", sentAt: "2026-09-30T10:00:45.000Z" });
+    const ownSent = {
+      ...own,
+      msgId: "m9",
+      deliveryStatus: "sent" as const,
+      sentAt: "2026-09-30T10:01:00.000Z",
+    };
+    const cached: TimelineData = {
+      pages: [{ items: [early, ownQueued], nextCursor: null }],
+      pageParams: [undefined],
+    };
+
+    expect(
+      flattenTimeline(mergeHeadPage(cached, [ownSent, later, early])),
+    ).toEqual([ownSent, later, early]);
+  });
+
+  it("moves a row whose sentAt changed off an older page into the head", () => {
+    // c1 当初按受理时刻被拉进更早的一页；最新页说它其实是最新的一条
+    const ownQueued = { ...own, sentAt: "2026-09-30T10:00:00.000Z" };
+    const cached: TimelineData = {
+      pages: [
+        { items: [m2], nextCursor: "cur1" },
+        { items: [m1, ownQueued], nextCursor: null },
+      ],
+      pageParams: [undefined, "cur1"],
+    };
+    const ownSent = { ...own, msgId: "m9", deliveryStatus: "sent" as const };
+
+    expect(mergeHeadPage(cached, [ownSent, m2])).toEqual({
+      pages: [
+        { items: [ownSent, m2], nextCursor: "cur1" },
+        { items: [m1], nextCursor: null },
+      ],
+      pageParams: [undefined, "cur1"],
+    });
+  });
+
+  it("keeps the backend order among rows with the same sentAt", () => {
+    const a = msg({ msgId: "a", sentAt: m2.sentAt });
+    const b = msg({ msgId: "b", sentAt: m2.sentAt });
+    const next = mergeHeadPage(data, [own, b, a, m2]);
+
+    expect(next.pages[0]?.items.map((m) => m.clientMsgId ?? m.msgId)).toEqual([
+      "c1",
+      "b",
+      "a",
+      "m2",
+    ]);
+  });
+
+  // 前端 #17：补拉请求发出时 c1 还是 accepted，回来前 sent 事件已经就地写过 —— 旧快照不能把状态退回去
+  it("does not let an older queued / accepted snapshot overwrite a settled delivery status", () => {
+    const ownSent = {
+      ...own,
+      msgId: "m9",
+      deliveryStatus: "sent" as const,
+      sentAt: "2026-09-30T10:04:00.000Z",
+    };
+    const cached: TimelineData = {
+      pages: [{ items: [ownSent, m2], nextCursor: null }],
+      pageParams: [undefined],
+    };
+    const stale = { ...own, deliveryStatus: "accepted" as const };
+    const m3 = msg({ msgId: "m3", sentAt: "2026-09-30T10:03:30.000Z" });
+
+    expect(mergeHeadPage(cached, [stale, m3, m2]).pages[0]?.items).toEqual([
+      ownSent,
+      m3,
+      m2,
+    ]);
+
+    // 反过来照常更新：unknown 可以回到 queued，cancelled 之后仍可能落地成 sent
+    const cancelled = { ...own, deliveryStatus: "cancelled" as const };
+    const withCancelled: TimelineData = {
+      pages: [{ items: [cancelled, m2], nextCursor: null }],
+      pageParams: [undefined],
+    };
+
+    expect(
+      mergeHeadPage(withCancelled, [ownSent, m2]).pages[0]?.items[0],
+    ).toEqual(ownSent);
   });
 
   it("returns the data unchanged in shape when fresh is empty", () => {
@@ -179,6 +305,20 @@ describe("flattenTimeline", () => {
     };
 
     expect(flattenTimeline(twice)).toEqual([ownSent, m2, m1]);
+  });
+
+  // 前端 #17：行留在旧页、sentAt 却变新了，拍平结果仍按 sentAt 倒序
+  it("orders the flattened rows by sentAt desc across pages", () => {
+    const ownSent = { ...own, sentAt: "2026-09-30T10:05:00.000Z" };
+    const stale: TimelineData = {
+      pages: [
+        { items: [m2], nextCursor: "cur1" },
+        { items: [ownSent, m1], nextCursor: null },
+      ],
+      pageParams: [undefined, "cur1"],
+    };
+
+    expect(flattenTimeline(stale)).toEqual([ownSent, m2, m1]);
   });
 });
 

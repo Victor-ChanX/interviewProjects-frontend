@@ -64,6 +64,11 @@ export type MessageEventPayload = {
   clientMsgId?: string | null;
   deliveryStatus?: components["schemas"]["DeliveryStatus"] | null;
   failCode?: string | null;
+  /**
+   * 这条消息当前的 sentAt（ISO）。自己的消息排队时是受理时刻、发出后变成网关时刻，时间线据此挪位置；
+   * 可选：不带时位置等下一次最新页补拉再纠正（前端 #17）。
+   */
+  sentAt?: string | null;
 };
 
 export type AgentRunEventPayload = {
