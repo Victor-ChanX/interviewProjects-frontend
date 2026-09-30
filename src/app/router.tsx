@@ -33,6 +33,8 @@ export const router = createBrowserRouter([
         path: "agent-runs/:runId",
         lazy: () => import("./agent-runs/[runId]/page"),
       },
+      // 前端 #9：LLM 设置（Base URL / API Key / 模型；viewer 只读）
+      { path: "settings/llm", lazy: () => import("./settings/llm/page") },
       { path: "*", lazy: () => import("./not-found") },
     ],
   },

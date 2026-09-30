@@ -12,6 +12,7 @@ import type { AppShellViewProps } from "./types";
 const NAV_ITEMS = [
   { to: "/accounts", label: "账号" },
   { to: "/groups", label: "群组" },
+  { to: "/settings/llm", label: "模型设置" },
 ] as const;
 
 // 断线期间显示「重连中」（退避 / 重试中），带 sinceSeq 重连成功、服务端补发中显示「同步中」（#7）。

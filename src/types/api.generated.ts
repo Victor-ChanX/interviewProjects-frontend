@@ -696,6 +696,142 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/llm/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 用给定的 Base URL 与 key 向服务商获取模型列表（按 id 排序） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LlmModelsRequestInput"];
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LlmModelListResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llm/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 当前的 LLM 设置（Base URL、模型、key 提示）；Agent 服务不是 llm-agent 时 supported=false */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LlmSettingsRead"];
+                    };
+                };
+            };
+        };
+        /** 保存 LLM 设置（apiKey 省略时仅在 Base URL 不变时沿用已保存的 key），llm-agent 立即生效 */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LlmSettingsUpdateInput"];
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LlmSettingsRead"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/llm/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 用已保存的 LLM 设置测试连接（一轮带工具历史的对话 + 一次审计），失败也返回 200 与原因 */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LlmTestResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sequence-runs/{id}": {
         parameters: {
             query?: never;
@@ -1083,6 +1219,98 @@ export interface components {
         };
         LeaveAllResponseInput: {
             jobId: string;
+        };
+        /** @enum {string} */
+        LlmConfigSource: "file" | "none";
+        /** @enum {string} */
+        LlmConfigSourceInput: "file" | "none";
+        LlmModelListResponse: {
+            items: components["schemas"]["LlmModelRead"][];
+            total: number;
+        };
+        LlmModelListResponseInput: {
+            items: components["schemas"]["LlmModelReadInput"][];
+            total: number;
+        };
+        LlmModelRead: {
+            id: string;
+            ownedBy: string | null;
+        };
+        LlmModelReadInput: {
+            id: string;
+            ownedBy: string | null;
+        };
+        LlmModelsRequest: {
+            /** @description 省略时沿用已保存的 key —— 仅当 baseUrl 与已保存的相同 */
+            apiKey?: string;
+            /**
+             * Format: uri
+             * @description OpenAI Chat Completions 兼容端点的 base url，不含 /chat/completions
+             */
+            baseUrl: string;
+        };
+        LlmModelsRequestInput: {
+            /** @description 省略时沿用已保存的 key —— 仅当 baseUrl 与已保存的相同 */
+            apiKey?: string;
+            /**
+             * Format: uri
+             * @description OpenAI Chat Completions 兼容端点的 base url，不含 /chat/completions
+             */
+            baseUrl: string;
+        };
+        LlmSettingsRead: {
+            apiKeyHint: string | null;
+            auditModel: string | null;
+            baseUrl: string | null;
+            hasApiKey: boolean;
+            model: string | null;
+            source: components["schemas"]["LlmConfigSource"] | null;
+            supported: boolean;
+            updatedAt: string | null;
+        };
+        LlmSettingsReadInput: {
+            apiKeyHint: string | null;
+            auditModel: string | null;
+            baseUrl: string | null;
+            hasApiKey: boolean;
+            model: string | null;
+            source: components["schemas"]["LlmConfigSourceInput"] | null;
+            supported: boolean;
+            updatedAt: string | null;
+        };
+        LlmSettingsUpdate: {
+            /** @description 省略时沿用已保存的 key —— 仅当 baseUrl 与已保存的相同 */
+            apiKey?: string;
+            auditModel?: string | null;
+            /**
+             * Format: uri
+             * @description OpenAI Chat Completions 兼容端点的 base url，不含 /chat/completions
+             */
+            baseUrl: string;
+            model: string;
+        };
+        LlmSettingsUpdateInput: {
+            /** @description 省略时沿用已保存的 key —— 仅当 baseUrl 与已保存的相同 */
+            apiKey?: string;
+            auditModel?: string | null;
+            /**
+             * Format: uri
+             * @description OpenAI Chat Completions 兼容端点的 base url，不含 /chat/completions
+             */
+            baseUrl: string;
+            model: string;
+        };
+        LlmTestResult: {
+            latencyMs: number;
+            message: string;
+            model: string | null;
+            ok: boolean;
+        };
+        LlmTestResultInput: {
+            latencyMs: number;
+            message: string;
+            model: string | null;
+            ok: boolean;
         };
         LoginResponse: {
             accessToken: string;
