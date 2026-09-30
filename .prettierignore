@@ -1,0 +1,11 @@
+# Prettier 门禁范围 = 全仓（`npm run format:check` 即 `prettier --check .`），
+# 另外自动跳过 .gitignore 里的东西（node_modules、dist、coverage …）。下面是刻意排除的：
+
+# 生成物不参与格式检查（openapi-typescript 的输出风格自成一体）
+src/types/api.generated.ts
+# 结构地图、openapi 快照副本：脚本生成，--check 比对的是脚本自己的输出
+# npm 自己维护
+package-lock.json
+# Markdown 不纳入：中文表格会被整表重排、`4~5` 这类写法会被改成 `~~` 渲染成删除线，
+# 噪音远大于收益。改 md 只动自己那几行。
+*.md

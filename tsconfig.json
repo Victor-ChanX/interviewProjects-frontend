@@ -1,0 +1,28 @@
+{
+  // 仓根 tsconfig.json：tsc --noEmit 的范围 = src + scripts + 根目录的 vite / vitest 配置。
+  // Vite 自己不做类型检查，`npm run build` 与 pre-commit / CI 都先跑 tsc --noEmit。
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // bundler：Vite / vitest 的解析规则（无后缀相对导入、package.json exports），
+    // 与 NodeNext 不同，不要求相对导入带 .js 后缀。
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    // import.meta.env、静态资源 import 的类型；scripts/*.mts 用到 node 的 API。
+    "types": ["vite/client", "node"],
+    // paths 不配 baseUrl（TS 6 起 baseUrl 废弃）：相对 tsconfig.json 所在目录解析。
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src", "scripts", "vite.config.ts", "vitest.config.mts"]
+}
