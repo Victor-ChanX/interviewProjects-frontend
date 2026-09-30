@@ -52,6 +52,11 @@ export const queryKeys = {
     all: ["llm-settings"] as const,
     detail: () => ["llm-settings", "detail"] as const,
   },
+  // 演示用模拟控制（后端 #46）：开关状态，无参数。
+  simControls: {
+    all: ["sim-controls"] as const,
+    status: () => ["sim-controls", "status"] as const,
+  },
   // 工作台概览（后端 #22）：工作台与侧栏「异常中心」的未处理数共用。「今日」按查看者时区（后端 #47），
   // 时区进 key；省参即全部时区的前缀（WS 同步按前缀改）。
   dashboard: {

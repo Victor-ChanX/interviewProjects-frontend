@@ -3,6 +3,7 @@
 // （use-group-detail 的开关 / 状态、use-message-timeline 的最新页）。发消息表单的「在线账号」由应用壳里的
 // useAccountEvents 跟着账号状态事件变。
 // 全部退群（前端 #10）只给 admin：确认 / 提交 / 进度在 use-leave-all。
+// 模拟外部发言（前端 #19）只给 admin 且后端开关打开时：表单 / 提交在 use-simulate-inbound。
 
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
@@ -17,6 +18,7 @@ import type {
   GroupSetting,
   LeaveAllDialogViewProps,
   SendMessageFormViewProps,
+  SimulateInboundDialogViewProps,
 } from "./types";
 import { useAgentRuns } from "./use-agent-runs";
 import { useGroupDetail } from "./use-group-detail";
@@ -25,6 +27,7 @@ import { useLeaveAll } from "./use-leave-all";
 import { useMessageTimeline } from "./use-message-timeline";
 import { useSendMessage } from "./use-send-message";
 import { useSenderNames } from "./use-sender-names";
+import { useSimulateInbound } from "./use-simulate-inbound";
 
 const SETTING_TOAST: Readonly<Record<GroupSetting, string>> = {
   agentEnabled: "Agent 自动回复",
@@ -49,6 +52,7 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
   const members = detail.group?.members ?? NO_MEMBERS;
   const send = useSendMessage({ groupId, members, enabled: canWrite });
   const leave = useLeaveAll(groupId);
+  const simulate = useSimulateInbound({ groupId, enabled: canWrite });
   const { toggleSetting, refetch: refetchDetail } = detail;
   const { refetch: refetchTimeline } = timeline;
   const { refetch: refetchAgentRuns } = agentRuns;
@@ -125,6 +129,27 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
     [canWrite, detail.group?.gatewayGroupId, groupId, leave],
   );
 
+  const simulateInbound = useMemo<SimulateInboundDialogViewProps | null>(
+    () =>
+      simulate.available
+        ? {
+            open: simulate.open,
+            onOpenChange: simulate.setOpen,
+            register: simulate.register,
+            errors: simulate.errors,
+            submitting: simulate.submitting,
+            agentEnabled: detail.group?.agentEnabled ?? false,
+            onSubmit: simulate.submit,
+          }
+        : null,
+    [detail.group?.agentEnabled, simulate],
+  );
+  const { setOpen: setSimulateOpen } = simulate;
+
+  const onSimulateInbound = useCallback(() => {
+    setSimulateOpen(true);
+  }, [setSimulateOpen]);
+
   return (
     <GroupDetailView
       group={detail.group}
@@ -160,6 +185,8 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
       }}
       leaveAll={leaveAll}
       onLeaveAll={leave.openDialog}
+      simulateInbound={simulateInbound}
+      onSimulateInbound={onSimulateInbound}
     />
   );
 }

@@ -8,6 +8,7 @@ import type { MessageRead } from "@/services/message-service";
 
 import type { GroupTab } from "./group-tabs";
 import type { SendMessageFormValues } from "./send-message-schema";
+import type { SimulateInboundFormValues } from "./simulate-inbound-schema";
 
 /** 群的两个可切换开关（PATCH /api/groups/:id 的键）。 */
 export type GroupSetting = "agentEnabled" | "autoKickEnabled";
@@ -71,6 +72,18 @@ export interface LeaveAllDialogViewProps {
   progress: (JobProgressProps & { running: boolean }) | null;
 }
 
+/** 「模拟外部发言」弹窗（前端 #19）：admin 且后端开关打开时才有。 */
+export interface SimulateInboundDialogViewProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  register: UseFormRegister<SimulateInboundFormValues>;
+  errors: FieldErrors<SimulateInboundFormValues>;
+  submitting: boolean;
+  /** 本群开着 Agent 自动回复时提示「会触发一次运行」。 */
+  agentEnabled: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}
+
 export interface GroupDetailViewProps {
   group: GroupRead | undefined;
   loading: boolean;
@@ -92,4 +105,7 @@ export interface GroupDetailViewProps {
   /** admin 才有「全部退群」；viewer 为 null。按钮只在群 active / unreachable 时显示，弹窗一直挂着（进度要看完）。 */
   leaveAll: LeaveAllDialogViewProps | null;
   onLeaveAll: () => void;
+  /** 演示用「模拟外部发言」：admin 且后端开关打开时才有；按钮只在群 active 时显示。 */
+  simulateInbound: SimulateInboundDialogViewProps | null;
+  onSimulateInbound: () => void;
 }

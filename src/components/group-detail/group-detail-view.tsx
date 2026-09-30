@@ -2,7 +2,7 @@
 // + 页签（消息时间线与发送框 / 成员 / Agent 运行 / 序列）。页签面板 keepMounted：切走再切回来，
 // 发送框里没发出去的字不丢（frontend-component-splitting「页签面板里有表单时用 hidden」）。
 
-import { CalendarClock, LogOut } from "lucide-react";
+import { CalendarClock, LogOut, MessageSquarePlus } from "lucide-react";
 import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import { LeaveAllDialogView } from "./leave-all-dialog-view";
 import { MemberTableView } from "./member-table-view";
 import { MessageTimelineView } from "./message-timeline-view";
 import { SendMessageFormView } from "./send-message-form-view";
+import { SimulateInboundDialogView } from "./simulate-inbound-dialog-view";
 import type { GroupDetailViewProps } from "./types";
 
 /** 全部退群只对还在群里的状态开放（left 后端回 409 GROUP_ALREADY_LEFT）。 */
@@ -51,6 +52,8 @@ export function GroupDetailView({
   agentRuns,
   leaveAll,
   onLeaveAll,
+  simulateInbound,
+  onSimulateInbound,
 }: GroupDetailViewProps) {
   if (error)
     return (
@@ -97,6 +100,12 @@ export function GroupDetailView({
         }
         actions={
           <>
+            {simulateInbound && group.status === "active" ? (
+              <Button variant="outline" onClick={onSimulateInbound}>
+                <MessageSquarePlus />
+                模拟外部发言
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               render={<Link to={sequenceHref} />}
@@ -116,6 +125,9 @@ export function GroupDetailView({
       />
 
       {leaveAll ? <LeaveAllDialogView {...leaveAll} /> : null}
+      {simulateInbound ? (
+        <SimulateInboundDialogView {...simulateInbound} />
+      ) : null}
 
       <GroupInfoCardView
         group={group}
