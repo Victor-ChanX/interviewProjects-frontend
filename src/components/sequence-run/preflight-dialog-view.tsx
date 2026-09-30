@@ -21,17 +21,9 @@ import { cn } from "@/lib/utils";
 
 import type { PreflightDialogViewProps } from "./types";
 
-const SOURCE_LABEL: Readonly<Record<"default" | "step", string>> = {
-  default: "vars",
-  step: "stepVars",
-};
-
+// 来源用题目 B1 / 接口 varSources 的原值（与运行进度表一致），括号里提示它对应表单的哪一栏。
 function sourceLabel(source: string): string {
-  if (source === "default") return SOURCE_LABEL.default;
-
-  const index = source.slice("step:".length);
-
-  return `${SOURCE_LABEL.step} 第 ${index} 步`;
+  return source === "default" ? "default（vars）" : `${source}（stepVars）`;
 }
 
 export function PreflightDialogView({
