@@ -23,22 +23,22 @@ export default defineConfig({
     // 关掉 Node 的 webstorage 让 jsdom 的 localStorage 正常暴露。
     execArgv: ["--no-experimental-webstorage"],
     // 覆盖率地板（CI 跑 npm run test:coverage；本地 npm test 不带覆盖率，保持秒级）。
-    // 范围 = 必须带同位测试的那几类：lib / services / hooks /
-    // *-schema.ts。组件按约定不写渲染测试（浏览器验证兜底），算进来只会把数字
-    // 压到十几个点、失去信号。
-    // 覆盖率地板只防倒退、只准上调。出厂占位 0：首次 npm run test:coverage 实测后
-    // 改成「lines 实测值减 1 取整」。
+    // 范围 = 必须带同位测试的那几类：lib / services / hooks（含 feature 目录里的
+    // use-*.ts，时间线、序列运行这类业务流 hook 用 renderHook 测）/ *-schema.ts。
+    // 组件按约定不写渲染测试（浏览器验证兜底），算进来只会把数字压到十几个点、失去信号。
+    // 覆盖率地板只防倒退、只准上调（「lines 实测值减 1 取整」）：2026-09-30 实测 84.28，取 83。
     coverage: {
       provider: "v8",
       include: [
         "src/lib/**",
         "src/services/**",
         "src/hooks/**",
+        "src/components/**/use-*.ts",
         "src/**/*-schema.ts",
       ],
       exclude: ["**/*.test.{ts,tsx}"],
       reporter: ["text-summary"],
-      thresholds: { lines: 0 },
+      thresholds: { lines: 83 },
     },
   },
 });
