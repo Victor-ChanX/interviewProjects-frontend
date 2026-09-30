@@ -13,6 +13,9 @@
 // 刷新失败（refresh 也 401 / 网络错 / 响应里没有可解的 token）→ clearSession() + onAuthError()
 // （受保护布局的容器注入「跳登录页带 next」，src/components/app-shell/use-app-shell.ts），
 // 也只在那一次刷新里做一次。src/lib/ws.ts 收到 4401 时复用同一个 refreshAccessToken()。
+// 刷新页面时 access token 已过期 / 没有、但 refresh cookie 可能还有效：use-app-shell 在跳登录之前
+// 先 refreshAccessToken({ silent: true }) 试一次 —— silent 只是不触发 onAuthError（守卫自己会
+// 渲染 <Navigate> 去登录页，再触发一次就是双跳），会话照样清。
 // refresh 的 fetch 写在这里而不是 services：请求层不能引 services（services → api → request 会成环），
 // 而这个文件本来就是 eslint「不裸 fetch」的豁免块。
 
@@ -162,15 +165,16 @@ async function parseBody<T>(
 const REFRESH_URL = "/api/auth/refresh";
 
 let refreshing: Promise<boolean> | null = null;
+/** 本次单飞里是否有非 silent 的调用方：失败时只要有一个，就通知一次 onAuthError。 */
+let notifyOnFail = false;
 
 function failRefresh(): false {
   clearSession();
-  config.onAuthError();
 
   return false;
 }
 
-/** 真正发一次 refresh；成功写入新 access token。所有失败都收敛成 false（并清会话、通知 onAuthError）。 */
+/** 真正发一次 refresh；成功写入新 access token。所有失败都收敛成 false（并清会话；onAuthError 由单飞出口统一通知）。 */
 async function fetchRefreshedToken(): Promise<boolean> {
   let response: Response;
 
@@ -207,16 +211,38 @@ async function fetchRefreshedToken(): Promise<boolean> {
   return getAccessToken() !== null ? true : failRefresh();
 }
 
+export interface RefreshOptions {
+  /**
+   * true 时刷新失败不触发 onAuthError（会话照样清）。给「页面加载时无会话、先试一次续期」的守卫用：
+   * 它自己会渲染 <Navigate> 去登录页，onAuthError 再 navigate 一次就是双跳。
+   * 同一次单飞里只要有一个非 silent 的调用方（并发的 401），失败时仍通知一次。
+   */
+  silent?: boolean;
+}
+
 /**
  * 用 HttpOnly cookie 里的 refresh token 换新 access token。单飞：进行中时返回同一个 Promise，
- * 并发调用只发一次请求。resolve true = 新 token 已写入会话；false = 会话已清、onAuthError 已触发。
- * 请求层 401 后与 src/lib/ws.ts 的 4401 都走这里；业务层 NEVER 直接调（req.no-refresh-in-feature）。
+ * 并发调用只发一次请求。resolve true = 新 token 已写入会话；false = 会话已清、onAuthError 已触发
+ * （除非所有调用方都是 silent）。
+ * 请求层 401 后、src/lib/ws.ts 的 4401、受保护布局的加载守卫（use-app-shell）都走这里；
+ * 业务层 NEVER 直接调（req.no-refresh-in-feature）。
  */
-export function refreshAccessToken(): Promise<boolean> {
+export function refreshAccessToken(
+  options: RefreshOptions = {},
+): Promise<boolean> {
+  if (!options.silent) notifyOnFail = true;
+
   if (refreshing === null) {
-    refreshing = fetchRefreshedToken().finally(() => {
-      refreshing = null;
-    });
+    refreshing = fetchRefreshedToken()
+      .then((ok) => {
+        if (!ok && notifyOnFail) config.onAuthError();
+
+        return ok;
+      })
+      .finally(() => {
+        refreshing = null;
+        notifyOnFail = false;
+      });
   }
 
   return refreshing;

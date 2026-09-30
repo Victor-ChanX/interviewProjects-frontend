@@ -320,6 +320,41 @@ describe("401 refresh (single flight)", () => {
     expect(fetches.refreshCalls()).toHaveLength(2);
   });
 
+  it("refreshAccessToken({ silent: true }) clears the session but does not call onAuthError", async () => {
+    setAccessToken(OLD_TOKEN);
+
+    const onAuthError = vi.fn();
+
+    configureRequest({ onAuthError });
+
+    const fetches = stubAuthFetch(() =>
+      jsonResponse(401, {
+        error: { code: "UNAUTHORIZED", message: "refresh token 无效" },
+      }),
+    );
+
+    await expect(refreshAccessToken({ silent: true })).resolves.toBe(false);
+    expect(fetches.refreshCalls()).toHaveLength(1);
+    expect(onAuthError).not.toHaveBeenCalled();
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it("still calls onAuthError once when a non-silent caller joins a silent in-flight refresh", async () => {
+    setAccessToken(OLD_TOKEN);
+
+    const onAuthError = vi.fn();
+
+    configureRequest({ onAuthError });
+    stubAuthFetch(() => jsonResponse(401, { detail: "unauthorized" }));
+
+    const silent = refreshAccessToken({ silent: true });
+    const loud = refreshAccessToken();
+
+    expect(loud).toBe(silent);
+    await expect(Promise.all([silent, loud])).resolves.toEqual([false, false]);
+    expect(onAuthError).toHaveBeenCalledTimes(1);
+  });
+
   it("refreshAccessToken() fails when the response carries no usable access token", async () => {
     setAccessToken(OLD_TOKEN);
 

@@ -1,15 +1,15 @@
-// 受保护区域的会话编排：登录态、401 → 登录页（注入请求层的 onAuthError）、退出、实时连接生命周期。
-// 只在受保护布局（src/app/layout.tsx → app-shell-container）里用一次。
+// 受保护区域的会话编排：登录态、加载时的静默续期（checking）、401 → 登录页（注入请求层的
+// onAuthError）、退出、实时连接生命周期。只在受保护布局（src/app/layout.tsx → app-shell-container）里用一次。
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 import { useRealtimeConnection, useRealtimeStatus } from "@/hooks/use-realtime";
 import { useSession } from "@/hooks/use-session";
 import { clearSession } from "@/lib/auth";
 import { buildLoginRedirect, LOGIN_PATH } from "@/lib/login-redirect";
-import { configureRequest } from "@/lib/request";
+import { configureRequest, refreshAccessToken } from "@/lib/request";
 import { disconnectRealtime } from "@/lib/ws";
 import { logout } from "@/services/auth-service";
 
@@ -19,6 +19,33 @@ export function useAppShell() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const connection = useRealtimeStatus();
+
+  // 加载守卫（题目 B3「access token 过期后自动续期」的刷新页面场景）：sessionStorage 里的备份
+  // 过期时 src/lib/auth.ts 的 restore 会把它丢掉，守卫读到 null；但 HttpOnly 的 refresh cookie
+  // 可能还有效 —— 跳登录之前先静默 refresh 一次，成功就直接渲染，不用重新输密码。
+  // 策略是「每次挂载无会话就试一次」而不是看 sessionStorage 有没有登录痕迹：备份过期即被清、
+  // 痕迹本身也要另存一个键才能留住，而 refresh 401 只是一次不带 Bearer 的便宜请求。
+  // 只试一次：settled 后会话再变 null（401 / 退出）走原来的 <Navigate> / onAuthError，不再重试。
+  const [bootstrap, setBootstrap] = useState<"pending" | "settled">(() =>
+    session ? "settled" : "pending",
+  );
+  const checking = bootstrap === "pending" && session === null;
+
+  useEffect(() => {
+    if (bootstrap === "settled") return;
+
+    let cancelled = false;
+
+    // silent：失败时不触发 onAuthError（守卫自己会渲染 <Navigate> 去登录页，再 navigate 一次就是双跳）。
+    // 单飞：StrictMode 双挂载 / 并发调用拿到的是同一个 Promise，只发一次请求。
+    void refreshAccessToken({ silent: true }).finally(() => {
+      if (!cancelled) setBootstrap("settled");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bootstrap]);
 
   // 未登录时守卫用：把当前页记进 next，登录完回来。
   const loginRedirect = buildLoginRedirect(
@@ -62,5 +89,5 @@ export function useAppShell() {
       });
   }, [navigate, queryClient]);
 
-  return { session, connection, loginRedirect, onLogout };
+  return { session, checking, connection, loginRedirect, onLogout };
 }
