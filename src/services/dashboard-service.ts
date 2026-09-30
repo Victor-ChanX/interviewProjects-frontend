@@ -4,11 +4,18 @@
 import { api } from "@/lib/api";
 import type { components } from "@/types/api.generated";
 
-/** 账号 / 群 / 今日消息 / Agent 运行 / 序列 / job / 待处理异常的计数；「今日」按业务时区自然日（dayStart）。 */
+/** 账号 / 群 / 今日消息 / Agent 运行 / 序列 / job / 待处理异常的计数；「今日」按请求的时区自然日（dayStart）。 */
 export type DashboardSummary = components["schemas"]["DashboardSummary"];
 
 const DASHBOARD_SUMMARY_URL = "/api/dashboard/summary";
 
-export function getDashboardSummary(): Promise<DashboardSummary> {
-  return api.get<DashboardSummary>(DASHBOARD_SUMMARY_URL);
+/** 「今日」按查看者时区算（后端 #47）：时区名作为 timeZone 参数，编码在这里做。 */
+export function buildDashboardSummaryUrl(timeZone: string): string {
+  return `${DASHBOARD_SUMMARY_URL}?timeZone=${encodeURIComponent(timeZone)}`;
+}
+
+export function getDashboardSummary(
+  timeZone: string,
+): Promise<DashboardSummary> {
+  return api.get<DashboardSummary>(buildDashboardSummaryUrl(timeZone));
 }

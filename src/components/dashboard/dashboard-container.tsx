@@ -26,6 +26,7 @@ export function DashboardContainer() {
   return (
     <DashboardView
       today={state.today}
+      timeZone={state.timeZone}
       updatedAt={state.updatedAt}
       loading={state.loading}
       error={state.error}

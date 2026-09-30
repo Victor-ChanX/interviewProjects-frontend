@@ -38,6 +38,7 @@ const CAPABILITIES = [
 
 export function DashboardView({
   today,
+  timeZone,
   updatedAt,
   loading,
   error,
@@ -52,7 +53,7 @@ export function DashboardView({
     <>
       <PageHeader
         title="工作台"
-        description={`今天是 ${today}（东八区）· 数据每 30 秒自动刷新${updatedAt ? `，最近更新 ${updatedAt}` : ""}`}
+        description={`今天是 ${today}（${timeZone}）· 数据每 30 秒自动刷新${updatedAt ? `，最近更新 ${updatedAt}` : ""}`}
         actions={
           <Button variant="outline" onClick={onRefresh} disabled={retrying}>
             <RefreshCw className={cn({ "animate-spin": retrying })} />

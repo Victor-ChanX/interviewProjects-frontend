@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 
 import { useRealtimeEvent } from "@/hooks/use-realtime";
+import { viewerTimeZone } from "@/lib/format-date";
 import { queryKeys } from "@/lib/query-keys";
 import { REALTIME_EVENT_TYPES, type RealtimeEvent } from "@/lib/ws";
 import {
@@ -34,9 +35,11 @@ export function adjustUnresolved(
 }
 
 export function useDashboardSummary({ enabled = true } = {}) {
+  // 「今日」按查看者时区算：同一个浏览器会话里时区不变，工作台与侧栏徽标仍共用一份缓存。
+  const timeZone = viewerTimeZone();
   const query = useQuery({
-    queryKey: queryKeys.dashboard.summary(),
-    queryFn: getDashboardSummary,
+    queryKey: queryKeys.dashboard.summary(timeZone),
+    queryFn: () => getDashboardSummary(timeZone),
     enabled,
     refetchInterval: DASHBOARD_POLL_MS,
     // 侧栏徽标与工作台共用：失败由工作台的错误卡展示，不在每个页面弹 toast。
@@ -44,6 +47,7 @@ export function useDashboardSummary({ enabled = true } = {}) {
   });
 
   return {
+    timeZone,
     summary: query.data,
     loading: query.isPending && !query.data,
     error: query.error,
@@ -58,14 +62,15 @@ export function useDashboardSummarySync(): void {
 
   const onEvent = useCallback(
     (_payload: unknown, event: RealtimeEvent) => {
+      // 前缀：不管缓存按哪个时区建的都改到
       const key = queryKeys.dashboard.summary();
 
       if (event.type === "inconsistency")
-        queryClient.setQueryData<DashboardSummary>(key, (old) =>
+        queryClient.setQueriesData<DashboardSummary>({ queryKey: key }, (old) =>
           adjustUnresolved(old, 1),
         );
       else if (event.type === "inconsistency_resolved")
-        queryClient.setQueryData<DashboardSummary>(key, (old) =>
+        queryClient.setQueriesData<DashboardSummary>({ queryKey: key }, (old) =>
           adjustUnresolved(old, -1),
         );
 

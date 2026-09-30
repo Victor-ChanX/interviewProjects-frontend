@@ -205,10 +205,10 @@ const S_NEUTRAL = bans(
   `Literal[value=/${NEUTRAL_PALETTE_SOURCE}/]`,
   `TemplateElement[value.raw=/${NEUTRAL_PALETTE_SOURCE}/]`,
 );
-// frontend-api-function-calls「今天 / 本月」MUST：按业务时区取。`new Date().toISOString()`
+// frontend-api-function-calls「今天 / 本月」MUST：按查看者（浏览器）时区取。`new Date().toISOString()`
 // 是 UTC，东八区 0–8 点会取成前一天（源项目一个表单的「默认今天」就是这么错的）。
 const S_UTC_TODAY = bans(
-  "不要用 new Date().toISOString() 截「今天」：那是 UTC 日期，东八区早上 8 点前会变成前一天。用 lib 里按业务时区取日期的函数（Intl.DateTimeFormat + timeZone，例如 shanghaiToday()）。",
+  "不要用 new Date().toISOString() 截「今天」：那是 UTC 日期，东八区早上 8 点前会变成前一天。用 src/lib/format-date.ts 的 localDate()（Intl.DateTimeFormat + 查看者时区）。",
   "CallExpression[callee.property.name=/^(slice|substring|split)$/][callee.object.callee.property.name='toISOString'][callee.object.callee.object.type='NewExpression'][callee.object.callee.object.callee.name='Date'][callee.object.callee.object.arguments.length=0]",
 );
 const BASE = [

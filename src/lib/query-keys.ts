@@ -52,10 +52,14 @@ export const queryKeys = {
     all: ["llm-settings"] as const,
     detail: () => ["llm-settings", "detail"] as const,
   },
-  // 工作台概览（后端 #22）：工作台与侧栏「异常中心」的未处理数共用。
+  // 工作台概览（后端 #22）：工作台与侧栏「异常中心」的未处理数共用。「今日」按查看者时区（后端 #47），
+  // 时区进 key；省参即全部时区的前缀（WS 同步按前缀改）。
   dashboard: {
     all: ["dashboard"] as const,
-    summary: () => ["dashboard", "summary"] as const,
+    summary: (timeZone?: string) =>
+      timeZone === undefined
+        ? (["dashboard", "summary"] as const)
+        : (["dashboard", "summary", timeZone] as const),
   },
   // 最近动态（GET /api/activity，useInfiniteQuery；游标在 pageParam 里）：每页条数不同的两处（工作台 20、
   // 实时动态页 50）各一份缓存。

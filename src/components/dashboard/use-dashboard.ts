@@ -6,7 +6,7 @@ import { useCallback, useMemo } from "react";
 import { useActivityFeed } from "@/hooks/use-activity-feed";
 import { useDashboardSummary } from "@/hooks/use-dashboard-summary";
 import { useNow } from "@/hooks/use-now";
-import { businessDate, formatDateTime } from "@/lib/format-date";
+import { formatDateTime, localDate } from "@/lib/format-date";
 
 import { buildAttentionItems, buildStatCards } from "./dashboard-cards";
 
@@ -43,7 +43,8 @@ export function useDashboard() {
   }, [refetchActivity, refetchSummary]);
 
   return {
-    today: businessDate(new Date(now)),
+    today: localDate(new Date(now), summaryState.timeZone),
+    timeZone: summaryState.timeZone,
     updatedAt: summary ? formatDateTime(summary.generatedAt) : null,
     loading: summaryState.loading,
     error: summaryState.error,

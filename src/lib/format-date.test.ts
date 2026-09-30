@@ -1,14 +1,31 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  businessDate,
   formatDateTime,
   formatRelativeTime,
+  localDate,
+  viewerTimeZone,
 } from "@/lib/format-date";
 
 describe("formatDateTime", () => {
-  it("renders ISO instants in the business time zone", () => {
-    expect(formatDateTime("2026-08-31T16:30:00Z")).toBe("2026-09-01 00:30");
+  it("renders the same instant in the viewer's time zone", () => {
+    expect(formatDateTime("2026-08-31T16:30:00Z", "Asia/Shanghai")).toBe(
+      "2026-09-01 00:30",
+    );
+    expect(formatDateTime("2026-08-31T16:30:00Z", "UTC")).toBe(
+      "2026-08-31 16:30",
+    );
+    expect(formatDateTime("2026-08-31T16:30:00Z", "America/New_York")).toBe(
+      "2026-08-31 12:30",
+    );
+  });
+
+  it("defaults to the browser time zone", () => {
+    const instant = "2026-08-31T16:30:00Z";
+
+    expect(formatDateTime(instant)).toBe(
+      formatDateTime(instant, viewerTimeZone()),
+    );
   });
 
   it("falls back to a dash for empty or invalid input", () => {
@@ -17,10 +34,23 @@ describe("formatDateTime", () => {
   });
 });
 
-describe("businessDate", () => {
-  it("rolls over to the next day at 16:00 UTC (time zone discriminator)", () => {
-    expect(businessDate(new Date("2026-08-31T16:30:00Z"))).toBe("2026-09-01");
-    expect(businessDate(new Date("2026-08-31T15:30:00Z"))).toBe("2026-08-31");
+describe("localDate", () => {
+  it("rolls over at the viewer's midnight (time zone discriminator)", () => {
+    const lateUtc = new Date("2026-08-31T16:30:00Z");
+
+    expect(localDate(lateUtc, "Asia/Shanghai")).toBe("2026-09-01");
+    expect(localDate(lateUtc, "UTC")).toBe("2026-08-31");
+    expect(
+      localDate(new Date("2026-08-31T03:30:00Z"), "America/New_York"),
+    ).toBe("2026-08-30");
+  });
+});
+
+describe("viewerTimeZone", () => {
+  it("returns the runtime's IANA zone name", () => {
+    expect(viewerTimeZone()).toBe(
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
   });
 });
 

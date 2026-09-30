@@ -60,6 +60,9 @@ const SUMMARY: DashboardSummary = {
   generatedAt: "2026-09-30T08:00:00.000Z",
 };
 
+/** 缓存按时区建：WS 同步要按前缀改到它（不管是哪个时区） */
+const ZONE = "America/New_York";
+
 function setup() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -85,15 +88,20 @@ describe("adjustUnresolved", () => {
 });
 
 describe("useDashboardSummary", () => {
-  it("loads the summary through the service", async () => {
+  it("loads the summary for the browser time zone and caches it under that zone", async () => {
     getDashboardSummary.mockResolvedValue(SUMMARY);
 
-    const { wrapper } = setup();
+    const { queryClient, wrapper } = setup();
     const { result } = renderHook(() => useDashboardSummary(), { wrapper });
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     expect(result.current.loading).toBe(true);
+    expect(result.current.timeZone).toBe(zone);
     await waitFor(() => expect(result.current.summary).toEqual(SUMMARY));
-    expect(getDashboardSummary).toHaveBeenCalledTimes(1);
+    expect(getDashboardSummary).toHaveBeenCalledWith(zone);
+    expect(queryClient.getQueryData(queryKeys.dashboard.summary(zone))).toEqual(
+      SUMMARY,
+    );
   });
 });
 
@@ -101,7 +109,7 @@ describe("useDashboardSummarySync", () => {
   it("bumps the unresolved count on inconsistency events and drops it on resolve", () => {
     const { queryClient, invalidate, wrapper } = setup();
 
-    queryClient.setQueryData(queryKeys.dashboard.summary(), SUMMARY);
+    queryClient.setQueryData(queryKeys.dashboard.summary(ZONE), SUMMARY);
     renderHook(() => useDashboardSummarySync(), { wrapper });
 
     act(() =>
@@ -112,8 +120,9 @@ describe("useDashboardSummarySync", () => {
       }),
     );
     expect(
-      queryClient.getQueryData<DashboardSummary>(queryKeys.dashboard.summary())
-        ?.inconsistencies.unresolved,
+      queryClient.getQueryData<DashboardSummary>(
+        queryKeys.dashboard.summary(ZONE),
+      )?.inconsistencies.unresolved,
     ).toBe(2);
 
     act(() =>
@@ -124,8 +133,9 @@ describe("useDashboardSummarySync", () => {
       }),
     );
     expect(
-      queryClient.getQueryData<DashboardSummary>(queryKeys.dashboard.summary())
-        ?.inconsistencies.unresolved,
+      queryClient.getQueryData<DashboardSummary>(
+        queryKeys.dashboard.summary(ZONE),
+      )?.inconsistencies.unresolved,
     ).toBe(1);
     expect(invalidate).toHaveBeenCalledWith(
       { queryKey: queryKeys.dashboard.summary() },
@@ -136,7 +146,7 @@ describe("useDashboardSummarySync", () => {
   it("invalidates (without touching counts) on other events", () => {
     const { queryClient, invalidate, wrapper } = setup();
 
-    queryClient.setQueryData(queryKeys.dashboard.summary(), SUMMARY);
+    queryClient.setQueryData(queryKeys.dashboard.summary(ZONE), SUMMARY);
     renderHook(() => useDashboardSummarySync(), { wrapper });
 
     act(() =>
@@ -147,7 +157,7 @@ describe("useDashboardSummarySync", () => {
       }),
     );
 
-    expect(queryClient.getQueryData(queryKeys.dashboard.summary())).toEqual(
+    expect(queryClient.getQueryData(queryKeys.dashboard.summary(ZONE))).toEqual(
       SUMMARY,
     );
     expect(invalidate).toHaveBeenCalledTimes(1);
