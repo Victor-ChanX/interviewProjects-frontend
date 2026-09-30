@@ -126,12 +126,58 @@ describe("request error envelope", () => {
   });
 
   it("falls back to an HTTP message when the body is not JSON", async () => {
-    stubFetch(new Response("oops", { status: 502 }));
+    stubFetch(new Response("oops", { status: 418 }));
+
+    await expect(request("/api/x", { retries: 0 })).rejects.toMatchObject({
+      status: 418,
+      code: null,
+      message: "请求失败（HTTP 418）",
+    });
+  });
+
+  it("says 'try again later' for gateway-type failures with an HTML page (proxy / CDN)", async () => {
+    stubFetch(new Response("<html>Bad gateway</html>", { status: 502 }));
 
     await expect(request("/api/x", { retries: 0 })).rejects.toMatchObject({
       status: 502,
       code: null,
-      message: "请求失败（HTTP 502）",
+      message: "服务暂时不可用（HTTP 502），请稍后再试",
+    });
+  });
+
+  it("never shows Cloudflare's own English detail", async () => {
+    stubFetch(
+      jsonResponse(502, {
+        title: "Error 502: Bad gateway",
+        status: 502,
+        detail:
+          "The origin web server returned an invalid or incomplete response to Cloudflare.",
+        cloudflare_error: true,
+      }),
+    );
+
+    await expect(request("/api/x", { retries: 0 })).rejects.toMatchObject({
+      status: 502,
+      code: null,
+      message: "服务暂时不可用（HTTP 502），请稍后再试",
+    });
+  });
+
+  it("still shows our backend's own reason on a 503 envelope", async () => {
+    stubFetch(
+      jsonResponse(503, {
+        error: {
+          code: "GATEWAY_ERROR",
+          message: "网关模拟器不认识这个群",
+          requestId: "r1",
+        },
+      }),
+    );
+
+    await expect(request("/api/x", { retries: 0 })).rejects.toMatchObject({
+      status: 503,
+      code: "GATEWAY_ERROR",
+      message: "网关模拟器不认识这个群",
     });
   });
 });

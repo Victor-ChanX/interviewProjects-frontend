@@ -109,13 +109,27 @@ export function buildUrl(
   return BASE_URL ? url.toString() : `${url.pathname}${url.search}`;
 }
 
+/** 源站挂了 / 超时 / 被 CDN 拦下时的状态码：提示「稍后再试」，而不是笼统的「请求失败」 */
+const UNAVAILABLE_STATUS = /^(502|503|504|52\d)$/;
+
 async function parseErrorMessage(
   response: Response,
 ): Promise<{ message: string; detail: unknown; code: string | null }> {
-  const fallback = `请求失败（HTTP ${response.status}）`;
+  const fallback = UNAVAILABLE_STATUS.test(String(response.status))
+    ? `服务暂时不可用（HTTP ${response.status}），请稍后再试`
+    : `请求失败（HTTP ${response.status}）`;
 
   try {
     const data: unknown = await response.json();
+
+    // Cloudflare 自己生成的错误（前端 #22）：源站没响应或回了 502 时，它把响应体整个换成
+    // { cloudflare_error: true, detail: "The origin web server…" }。英文 detail 不给用户看，用中文兜底。
+    if (
+      data &&
+      typeof data === "object" &&
+      (data as { cloudflare_error?: unknown }).cloudflare_error === true
+    )
+      return { message: fallback, detail: data, code: null };
 
     // 本仓后端的信封（题目 2.3）：{ error: { code, message, requestId, ...业务字段 } }。
     if (data && typeof data === "object" && "error" in data) {

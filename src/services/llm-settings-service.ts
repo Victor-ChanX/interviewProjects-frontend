@@ -9,7 +9,7 @@
 // 业务拒绝按 RequestError.code 分流（不比对文案）：
 // - 422 LLM_API_KEY_REQUIRED：没存过 key，或服务商变了不能沿用已存的 key
 // - 422 LLM_UPSTREAM_UNAUTHORIZED：服务商拒绝了这个 key
-// - 502 LLM_UPSTREAM_ERROR：服务商不可达 / 返回异常
+// - 503 LLM_UPSTREAM_ERROR：服务商不可达 / 返回异常（后端 #50 起；经 Cloudflare 时 502 的原因会被吞掉）
 // - 409 LLM_AGENT_UNSUPPORTED：AGENT_URL 指向的服务不支持在线配置（如 Agent 模拟器）
 
 import { api, RequestError } from "@/lib/api";
