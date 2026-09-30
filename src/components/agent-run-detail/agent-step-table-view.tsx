@@ -61,7 +61,7 @@ export function AgentStepTableView({
 
   return (
     <div className="overflow-x-auto rounded-md border border-border">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm" data-testid="agent-step-table">
         <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
           <tr>
             {HEADERS.map((header, i) => (

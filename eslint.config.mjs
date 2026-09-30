@@ -519,6 +519,16 @@ const eslintConfig = defineConfig([
     files: ["scripts/**", "*.{js,mjs,ts,mts}"],
     languageOptions: { globals: { ...globals.node, ...globals.es2022 } },
   },
+  // 端到端（e2e/**，前端 #8）与 playwright.config.ts：跑在 Node 里（Playwright 的 request /
+  // page 是它自己的 API，不经 src/lib/request.ts），所以给 node 全局变量。上面的分层
+  // no-restricted-imports 与 no-restricted-syntax（裸 fetch、queryKey、../ 相对路径……）都只匹配
+  // src/**，对 e2e 本来就不生效 —— 这里不再加限制，也不把 src 的规则复制过来：e2e 里
+  // 直接调 API 与模拟器管理端点是它的本职。仍受全局规则（import 顺序 / 空行 / 未用变量 /
+  // 只能 import package.json 里声明的包）约束。
+  {
+    files: ["e2e/**", "playwright.config.ts"],
+    languageOptions: { globals: { ...globals.node, ...globals.es2022 } },
+  },
   // Vite 的 React Fast Refresh 要求一个模块只导出组件，否则整页刷新。路由文件按
   // React Router lazy 约定具名导出：`Component` / `ErrorBoundary` / `HydrateFallback` 是
   // PascalCase 的组件，规则本来就认；`loader` / `action` / `handle` / `shouldRevalidate` 不是

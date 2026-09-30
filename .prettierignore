@@ -9,3 +9,6 @@ package-lock.json
 # Markdown 不纳入：中文表格会被整表重排、`4~5` 这类写法会被改成 `~~` 渲染成删除线，
 # 噪音远大于收益。改 md 只动自己那几行。
 *.md
+# Playwright 产物（已在 .gitignore，这里再写一遍是让 prettier 在没有 .gitignore 的环境里也跳过）
+test-results/
+playwright-report/

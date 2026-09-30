@@ -70,6 +70,7 @@ export function AgentRunDetailView({
           <Badge
             variant="outline"
             className={cn("font-medium", AGENT_RUN_STATUS_CLASS[run.status])}
+            data-testid="agent-run-status"
           >
             {AGENT_RUN_STATUS_LABELS[run.status]}
           </Badge>
