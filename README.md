@@ -1,16 +1,47 @@
 # 多账号群组消息平台 · 控制台
 
-React 18 + TypeScript + Vite。后端在 [interviewProjects-backend](https://github.com/Victor-ChanX/interviewProjects-backend)，
-项目规划见 [后端仓的 docs/plan.md](https://github.com/Victor-ChanX/interviewProjects-backend/blob/main/docs/plan.md)。
+React 18 + TypeScript + Vite + TanStack Query + shadcn（Base UI）。后端在
+[interviewProjects-backend](https://github.com/Victor-ChanX/interviewProjects-backend)，
+项目规划见[后端仓的 docs/plan.md](https://github.com/Victor-ChanX/interviewProjects-backend/blob/main/docs/plan.md)。
 
-## 运行
+## 本地跑起来
+
+前提：**Node ≥ 22.18**；后端已按[后端仓 README「本地跑起来」](https://github.com/Victor-ChanX/interviewProjects-backend#本地跑起来)
+在 http://localhost:8000 跑着（两个模拟器 + 后端）。
 
 ```bash
+cp .env.example .env    # VITE_API_PROXY=http://localhost:8000：开发时 /api 与 /ws 转发到后端
 npm install
-npm run dev        # http://localhost:5173，/api 代理到 VITE_API_PROXY（默认 http://localhost:8000）
-npm test
-npm run build      # tsc --noEmit && vite build
+npm run dev             # http://localhost:5173
 ```
+
+用 `admin / admin`（全部权限）或 `viewer / viewer`（只读）登录。没有 .env（没设 `VITE_API_PROXY`）时请求走同源相对路径、
+到不了后端 —— 登录页一上来就报错先查这个；登录报 HTTP 500 多半是后端没起来（Vite 代理连不上 8000）。
+
+页面（路由登记在 `src/app/router.tsx`）：
+
+| 页面 | 路径 | 内容 |
+| --- | --- | --- |
+| 工作台 | `/dashboard` | 账号 / 群 / 今日消息 / Agent 运行 / 序列的计数，需要处理的事项，实时动态 |
+| 账号管理 | `/accounts` | 五个服务账号的状态与合法转移（连接、标记离线、释放…） |
+| 群组管理 · 群详情 | `/groups`、`/groups/:groupId` | 建群 / 全部退群（带进度）；消息时间线（实时、加载更早）与发送；成员；Agent 运行；Agent 开关；演示用「模拟外部发言」 |
+| 序列运行 | `/groups/:groupId/sequences` | 选序列、填变量 → 预检弹窗 → 启动；运行进度 |
+| 定时序列 | `/sequences` | 序列定义列表与新建 |
+| Agent 运行 · 详情 | `/agent-runs`、`/agent-runs/:runId` | 全部运行；每一步的 kind、工具、入参、结果、审计结论、错误码，协议错误步的原始响应 |
+| 实时动态 · 异常中心 | `/activity`、`/inconsistencies` | 平台事件流；未知群消息、入站处理失败、退群对账不一致 |
+| 模型设置 | `/settings/llm` | 真实 LLM 版 Agent 的服务商、API Key、模型（后端 `AGENT_URL` 指向 llm-agent 时可用） |
+
+实时更新走 WebSocket（`/ws`，断线自动重连并按 seq 补发）；时间一律按**浏览器所在时区**显示，工作台的「今日」也按它统计。
+
+## 测试与检查
+
+```bash
+npm test                # vitest：纯函数、schema、service wrapper 与 hook（renderHook），全在内存里、不发请求
+npm run test:coverage   # CI 跑这个，行覆盖率地板见 vitest.config.mts
+npm run build           # tsc --noEmit && vite build（Vite 本身不做类型检查）
+npm run lint            # eslint（含分层约束）；npm run format:check 查 Prettier
+```
+
 
 ## 端到端（Playwright，前端 #8 / 题目 C3）
 
