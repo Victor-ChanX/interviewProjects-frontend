@@ -24,6 +24,7 @@ import { useAgentRuns } from "./use-agent-runs";
 import { useGroupDetail } from "./use-group-detail";
 import { useGroupTab } from "./use-group-tab";
 import { useLeaveAll } from "./use-leave-all";
+import { useMessageMedia } from "./use-message-media";
 import { useMessageTimeline } from "./use-message-timeline";
 import { useSendMessage } from "./use-send-message";
 import { useSenderNames } from "./use-sender-names";
@@ -47,6 +48,7 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
   const [tab, setTab] = useGroupTab();
   const detail = useGroupDetail(groupId);
   const timeline = useMessageTimeline(groupId);
+  const media = useMessageMedia(groupId, timeline.messages);
   const senderNames = useSenderNames();
   const agentRuns = useAgentRuns(groupId);
   const members = detail.group?.members ?? NO_MEMBERS;
@@ -140,6 +142,11 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
             submitting: simulate.submitting,
             agentEnabled: detail.group?.agentEnabled ?? false,
             onSubmit: simulate.submit,
+            imageName: simulate.imageName,
+            imageError: simulate.imageError,
+            imageInputKey: simulate.imageInputKey,
+            onImageChange: simulate.onImageChange,
+            onClearImage: simulate.clearImage,
           }
         : null,
     [detail.group?.agentEnabled, simulate],
@@ -165,6 +172,7 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
       members={{ members }}
       timeline={{
         messages: timeline.messages,
+        media,
         senderNames,
         loading: timeline.loading,
         error: timeline.error,

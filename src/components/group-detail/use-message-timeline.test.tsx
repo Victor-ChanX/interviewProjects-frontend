@@ -51,6 +51,7 @@ function msg(
     failCode: null,
     mediaUrl: null,
     localFilePath: null,
+    mediaStatus: null,
     ...overrides,
   };
 }

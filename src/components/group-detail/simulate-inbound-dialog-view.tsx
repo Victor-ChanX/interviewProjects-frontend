@@ -29,6 +29,11 @@ export function SimulateInboundDialogView({
   submitting,
   agentEnabled,
   onSubmit,
+  imageName,
+  imageError,
+  imageInputKey,
+  onImageChange,
+  onClearImage,
 }: SimulateInboundDialogViewProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -86,6 +91,40 @@ export function SimulateInboundDialogView({
                   {errors.text.message}
                 </p>
               ) : null}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="simulate-image">图片（可选）</Label>
+              <Input
+                key={imageInputKey}
+                id="simulate-image"
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                disabled={submitting}
+                aria-invalid={imageError ? true : undefined}
+                onChange={(event) =>
+                  onImageChange(event.currentTarget.files?.[0] ?? null)
+                }
+              />
+              {imageError ? (
+                <p className="text-xs text-destructive">{imageError}</p>
+              ) : imageName ? (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  将附上 {imageName}
+                  <button
+                    type="button"
+                    className="text-primary underline underline-offset-2"
+                    onClick={onClearImage}
+                  >
+                    移除
+                  </button>
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  PNG / JPEG / GIF / WebP，不超过 1 MB；平台会按题目 C1
+                  把它下载到本地并显示在时间线里。
+                </p>
+              )}
             </div>
           </form>
         </DialogBody>

@@ -6,6 +6,8 @@ import type { components } from "@/types/api.generated";
 
 type DeliveryStatus = components["schemas"]["DeliveryStatus"];
 
+type MediaStatus = components["schemas"]["MediaStatus"];
+
 export const DELIVERY_STATUS_LABELS: Readonly<Record<DeliveryStatus, string>> =
   {
     queued: "排队中",
@@ -73,4 +75,18 @@ export function senderDisplay(
       .slice(0, 2)
       .toUpperCase(),
   };
+}
+
+/** 附件（题目 C1）还不能显示时的占位文案；ready 时显示图片本身（前端 #24）。 */
+export const MEDIA_STATUS_LABELS: Readonly<Record<MediaStatus, string>> = {
+  downloading: "附件下载中…",
+  ready: "附件",
+  expired: "附件已过期（网关已删除）",
+  failed: "附件下载失败",
+  purged: "附件已按保留期清理",
+};
+
+/** 能在时间线里直接显示成图片的类型（与后端能生成的扩展名一致）。 */
+export function isImageBlob(blob: Blob): boolean {
+  return blob.type.startsWith("image/");
 }

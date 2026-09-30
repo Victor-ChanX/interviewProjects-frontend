@@ -36,6 +36,21 @@ export function sendUrl(groupId: string): string {
   return `${groupUrl(groupId)}/send`;
 }
 
+/** 附件文件（题目 C1 下载到本地的那份，后端 #59）：只有 mediaStatus = ready 的消息取得到。 */
+export function messageMediaUrl(groupId: string, msgId: string): string {
+  return `${messagesUrl(groupId)}/${encodeURIComponent(msgId)}/media`;
+}
+
+/** 取附件字节：`<img>` 带不上 Bearer，所以经请求层取成 Blob，再由调用方转成 object URL。 */
+export function fetchMessageMedia(
+  groupId: string,
+  msgId: string,
+): Promise<Blob> {
+  return api.get<Blob>(messageMediaUrl(groupId, msgId), {
+    responseType: "blob",
+  });
+}
+
 export function listMessages(
   groupId: string,
   params: ListMessagesParams,

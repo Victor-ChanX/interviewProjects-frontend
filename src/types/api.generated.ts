@@ -641,6 +641,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/groups/{id}/messages/{msgId}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取一条消息已下载到本地的附件文件（题目 C1） */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    msgId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/groups/{id}/send": {
         parameters: {
             query?: never;
@@ -762,6 +799,10 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
+                        media?: {
+                            base64: string;
+                            contentType: components["schemas"]["SimulateMediaTypeInput"];
+                        };
                         senderPlatformUserId: string;
                         text: string;
                     };
@@ -809,6 +850,42 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["HealthRead"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 就绪检查：数据库可查、迁移状态与代码一致、后台 worker 在跳心跳；不就绪 503 NOT_READY */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReadinessRead"];
                     };
                 };
             };
@@ -1856,6 +1933,10 @@ export interface components {
             ok: true;
         };
         /** @enum {string} */
+        MediaStatus: "downloading" | "ready" | "expired" | "failed" | "purged";
+        /** @enum {string} */
+        MediaStatusInput: "downloading" | "ready" | "expired" | "failed" | "purged";
+        /** @enum {string} */
         MemberRole: "creator" | "admin" | "member";
         /** @enum {string} */
         MemberRoleInput: "creator" | "admin" | "member";
@@ -1873,6 +1954,7 @@ export interface components {
             failCode: string | null;
             isOwn: boolean;
             localFilePath: string | null;
+            mediaStatus: components["schemas"]["MediaStatus"] | null;
             mediaUrl: string | null;
             msgId: string | null;
             senderPlatformUserId: string;
@@ -1886,12 +1968,35 @@ export interface components {
             failCode: string | null;
             isOwn: boolean;
             localFilePath: string | null;
+            mediaStatus: components["schemas"]["MediaStatusInput"] | null;
             mediaUrl: string | null;
             msgId: string | null;
             senderPlatformUserId: string;
             /** Format: date-time */
             sentAt: string;
             text: string;
+        };
+        /** @enum {string} */
+        ReadinessCheckState: "ok" | "fail";
+        /** @enum {string} */
+        ReadinessCheckStateInput: "ok" | "fail";
+        ReadinessRead: {
+            checks: {
+                database: components["schemas"]["ReadinessCheckState"];
+                scheduler: components["schemas"]["ReadinessCheckState"];
+                schema: components["schemas"]["ReadinessCheckState"];
+            };
+            /** @constant */
+            ok: true;
+        };
+        ReadinessReadInput: {
+            checks: {
+                database: components["schemas"]["ReadinessCheckStateInput"];
+                scheduler: components["schemas"]["ReadinessCheckStateInput"];
+                schema: components["schemas"]["ReadinessCheckStateInput"];
+            };
+            /** @constant */
+            ok: true;
         };
         SendResponse: {
             clientMsgId: string;
@@ -2035,6 +2140,10 @@ export interface components {
         SimulateInboundResponseInput: {
             gatewayGroupId: string;
         };
+        /** @enum {string} */
+        SimulateMediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+        /** @enum {string} */
+        SimulateMediaTypeInput: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
     };
     responses: never;
     parameters: never;

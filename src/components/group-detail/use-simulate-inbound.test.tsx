@@ -114,6 +114,63 @@ describe("useSimulateInbound", () => {
     expect(result.current.errors.text?.message).toBe("消息内容不能为空");
   });
 
+  it("rejects a non-image or oversized file on selection, without a request", () => {
+    service.getSimControls.mockResolvedValue({ enabled: true });
+
+    const { result } = renderHook(
+      () => useSimulateInbound({ groupId: "g1", enabled: true }),
+      { wrapper },
+    );
+
+    act(() =>
+      result.current.onImageChange(
+        new File(["%PDF"], "a.pdf", { type: "application/pdf" }),
+      ),
+    );
+    expect(result.current.imageError).toBe(
+      "只支持 PNG / JPEG / GIF / WebP 图片",
+    );
+    expect(result.current.imageName).toBeNull();
+
+    act(() =>
+      result.current.onImageChange(
+        new File([new Uint8Array(1024 * 1024 + 1)], "big.png", {
+          type: "image/png",
+        }),
+      ),
+    );
+    expect(result.current.imageError).toBe("图片不能超过 1 MB");
+  });
+
+  it("sends the selected image as base64 media and clears it after success", async () => {
+    service.getSimControls.mockResolvedValue({ enabled: true });
+    service.simulateInbound.mockResolvedValue({ gatewayGroupId: "g_abc" });
+
+    const { result } = renderHook(
+      () => useSimulateInbound({ groupId: "g1", enabled: true }),
+      { wrapper },
+    );
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+
+    act(() =>
+      result.current.onImageChange(
+        new File([bytes], "cat.png", { type: "image/png" }),
+      ),
+    );
+    expect(result.current.imageName).toBe("cat.png");
+    await type(result.current.register, "text", "看图");
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(service.simulateInbound).toHaveBeenCalledWith("g1", {
+      senderPlatformUserId: "ext-demo",
+      text: "看图",
+      media: { contentType: "image/png", base64: "iVBORw==" },
+    });
+    expect(result.current.imageName).toBeNull();
+  });
+
   it("shows the backend's message and keeps the dialog open on failure", async () => {
     service.getSimControls.mockResolvedValue({ enabled: true });
     service.simulateInbound.mockRejectedValue(

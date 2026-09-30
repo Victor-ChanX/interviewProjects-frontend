@@ -23,3 +23,29 @@ export const EMPTY_SIMULATE_INBOUND_FORM: SimulateInboundFormValues = {
   senderPlatformUserId: "ext-demo",
   text: "",
 };
+
+/** 可附带的图片（与后端 SimulateMediaType 一致） */
+export const SIMULATE_IMAGE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+] as const;
+
+export type SimulateImageType = (typeof SIMULATE_IMAGE_TYPES)[number];
+
+/** 图片原始字节上限（后端 SIMULATE_MEDIA_MAX_BYTES：前端 nginx 的请求体上限 2m，base64 膨胀 1/3） */
+export const SIMULATE_IMAGE_MAX_BYTES = 1024 * 1024;
+
+/** 选的文件能不能附上：能返回 null，不能返回给人看的原因 */
+export function validateImage(file: {
+  type: string;
+  size: number;
+}): string | null {
+  if (!(SIMULATE_IMAGE_TYPES as readonly string[]).includes(file.type))
+    return "只支持 PNG / JPEG / GIF / WebP 图片";
+
+  if (file.size > SIMULATE_IMAGE_MAX_BYTES) return "图片不能超过 1 MB";
+
+  return null;
+}

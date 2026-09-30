@@ -15,13 +15,59 @@ import { getErrorMessage } from "@/lib/get-error-message";
 import {
   DELIVERY_STATUS_LABELS,
   DELIVERY_STATUS_TONE,
+  MEDIA_STATUS_LABELS,
   senderDisplay,
   shouldShowFailCode,
 } from "@/lib/message-labels";
 import { cn } from "@/lib/utils";
 import { messageKey, type MessageRead } from "@/services/message-service";
 
-import type { MessageTimelineViewProps } from "./types";
+import type { MessageTimelineViewProps, TimelineMedia } from "./types";
+
+/** 附件（题目 C1）：图片直接显示；ready 但还没取回显示骨架；其余状态显示一行说明 */
+function MediaBlock({
+  message,
+  media,
+}: {
+  message: MessageRead;
+  media: TimelineMedia | undefined;
+}) {
+  const status = message.mediaStatus;
+
+  if (!status) return null;
+
+  if (status !== "ready")
+    return (
+      <p className="text-xs text-muted-foreground">
+        {MEDIA_STATUS_LABELS[status]}
+      </p>
+    );
+
+  if (!media) return <Skeleton className="h-32 w-48 rounded-xl" />;
+
+  if (!media.isImage)
+    return (
+      <a
+        href={media.url}
+        target="_blank"
+        rel="noreferrer"
+        className="text-xs text-primary underline underline-offset-2"
+      >
+        打开附件
+      </a>
+    );
+
+  return (
+    <a href={media.url} target="_blank" rel="noreferrer">
+      <img
+        src={media.url}
+        alt="图片附件"
+        loading="lazy"
+        className="max-h-64 max-w-full rounded-xl object-contain ring-1 ring-border"
+      />
+    </a>
+  );
+}
 
 function DeliveryBadge({ message }: { message: MessageRead }) {
   const status = message.deliveryStatus;
@@ -48,9 +94,11 @@ function DeliveryBadge({ message }: { message: MessageRead }) {
 function MessageRow({
   message,
   senderNames,
+  media,
 }: {
   message: MessageRead;
   senderNames: ReadonlyMap<string, string>;
+  media: TimelineMedia | undefined;
 }) {
   const own = message.isOwn;
   const sender = senderDisplay(message.senderPlatformUserId, senderNames);
@@ -92,6 +140,7 @@ function MessageRow({
         >
           {message.text}
         </p>
+        <MediaBlock message={message} media={media} />
       </div>
     </li>
   );
@@ -99,6 +148,7 @@ function MessageRow({
 
 export function MessageTimelineView({
   messages,
+  media,
   senderNames,
   loading,
   error,
@@ -172,6 +222,7 @@ export function MessageTimelineView({
                 key={messageKey(message)}
                 message={message}
                 senderNames={senderNames}
+                media={message.msgId ? media.get(message.msgId) : undefined}
               />
             ))}
           </ol>

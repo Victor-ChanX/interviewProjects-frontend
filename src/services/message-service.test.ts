@@ -8,6 +8,8 @@ import {
   listMessages,
   messageKey,
   messagesUrl,
+  fetchMessageMedia,
+  messageMediaUrl,
   sendMessage,
   sendUrl,
   type MessageRead,
@@ -21,6 +23,25 @@ describe("url builders", () => {
   it("encode the group id into both paths", () => {
     expect(messagesUrl("g 1")).toBe("/api/groups/g%201/messages");
     expect(sendUrl("g/1")).toBe("/api/groups/g%2F1/send");
+  });
+
+  it("encodes both ids into the media path", () => {
+    expect(messageMediaUrl("g 1", "m/1")).toBe(
+      "/api/groups/g%201/messages/m%2F1/media",
+    );
+  });
+});
+
+describe("fetchMessageMedia", () => {
+  it("GETs the media path as a blob", async () => {
+    const blob = new Blob(["x"], { type: "image/png" });
+
+    api.get.mockResolvedValue(blob);
+
+    await expect(fetchMessageMedia("g1", "m1")).resolves.toBe(blob);
+    expect(api.get).toHaveBeenCalledWith("/api/groups/g1/messages/m1/media", {
+      responseType: "blob",
+    });
   });
 });
 
@@ -75,6 +96,7 @@ describe("messageKey", () => {
     failCode: null,
     mediaUrl: null,
     localFilePath: null,
+    mediaStatus: null,
   };
 
   it("prefers clientMsgId, then msgId, then sender + sentAt", () => {

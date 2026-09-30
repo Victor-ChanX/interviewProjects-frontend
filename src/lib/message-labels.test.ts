@@ -4,6 +4,8 @@ import {
   buildSenderNames,
   DELIVERY_STATUS_LABELS,
   DELIVERY_STATUS_TONE,
+  isImageBlob,
+  MEDIA_STATUS_LABELS,
   senderDisplay,
   shouldShowFailCode,
 } from "@/lib/message-labels";
@@ -61,5 +63,24 @@ describe("senderDisplay", () => {
       name: "pu_ffffffffffff",
       initials: "FF",
     });
+  });
+});
+
+describe("MEDIA_STATUS_LABELS / isImageBlob", () => {
+  it("has a placeholder for every non-ready status", () => {
+    expect(MEDIA_STATUS_LABELS).toEqual({
+      downloading: "附件下载中…",
+      ready: "附件",
+      expired: "附件已过期（网关已删除）",
+      failed: "附件下载失败",
+      purged: "附件已按保留期清理",
+    });
+  });
+
+  it("only treats image/* blobs as displayable images", () => {
+    expect(isImageBlob(new Blob([""], { type: "image/webp" }))).toBe(true);
+    expect(isImageBlob(new Blob([""], { type: "application/pdf" }))).toBe(
+      false,
+    );
   });
 });

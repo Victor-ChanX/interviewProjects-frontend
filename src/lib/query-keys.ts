@@ -19,6 +19,9 @@ export const queryKeys = {
   messages: {
     all: ["messages"] as const,
     timeline: (groupId: string) => ["messages", "timeline", groupId] as const,
+    // 附件文件（前端 #24，GET /api/groups/:id/messages/:msgId/media 的 blob）：文件一旦下好不再变
+    media: (groupId: string, msgId: string) =>
+      ["messages", "media", groupId, msgId] as const,
   },
   // Agent run：按群的列表 + 单条详情。
   agentRuns: {

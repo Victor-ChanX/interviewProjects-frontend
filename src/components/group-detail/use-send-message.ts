@@ -91,6 +91,7 @@ export function useSendMessage({
           failCode: null,
           mediaUrl: null,
           localFilePath: null,
+          mediaStatus: null,
         };
 
         // 「加载更早」进行中也不能被它的写回盖掉（前端 #16）。

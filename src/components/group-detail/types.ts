@@ -17,9 +17,17 @@ export interface MemberTableViewProps {
   members: GroupMemberRead[];
 }
 
+/** 一条消息已取回的附件（题目 C1）：object URL；不是图片时 view 显示成链接。 */
+export interface TimelineMedia {
+  url: string;
+  isImage: boolean;
+}
+
 export interface MessageTimelineViewProps {
   /** 全部已加载的消息，sentAt 倒序（最新在前）；渲染方向由 view 决定。 */
   messages: MessageRead[];
+  /** msgId → 已取回的附件；mediaStatus = ready 但还没取回的不在里面（view 显示骨架）。 */
+  media: ReadonlyMap<string, TimelineMedia>;
   /** 平台用户 ID → 服务账号 ID：我方账号发的消息显示成 acc-1 而不是 pu_xxx。 */
   senderNames: ReadonlyMap<string, string>;
   loading: boolean;
@@ -82,6 +90,14 @@ export interface SimulateInboundDialogViewProps {
   /** 本群开着 Agent 自动回复时提示「会触发一次运行」。 */
   agentEnabled: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  /** 已选的图片文件名；null = 没选（前端 #24） */
+  imageName: string | null;
+  /** 选的文件不合规的原因；null = 没问题 */
+  imageError: string | null;
+  /** file input 的 key：清掉选择时换一个，让不受控的 input 重建 */
+  imageInputKey: number;
+  onImageChange: (file: File | null) => void;
+  onClearImage: () => void;
 }
 
 export interface GroupDetailViewProps {
