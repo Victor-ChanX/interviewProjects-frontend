@@ -41,3 +41,11 @@ npm run e2e        # = playwright test；首次先 npx playwright install chromi
 - **CI 接入**：公开 CI 要同时 checkout 后端仓到并排目录（`actions/checkout` 加 `path` + `repository`）、起一个
   Postgres service（`E2E_DATABASE_URL` 指过去，库名含 `e2e`）、两边都 `npm ci`，再 `npx playwright install --with-deps chromium`
   → `npm run e2e`。现在的 `.github/workflows/ci.yml` 还没接这一步。
+
+## 部署（Docker）
+
+`Dockerfile` 构建出一个 nginx 镜像：托管 `npm run build` 的静态页，`/api` 与 `/ws` 反代到
+`BACKEND_UPSTREAM`（默认 `backend:8000`），配置在 [`deploy/nginx.conf.template`](deploy/nginx.conf.template)。
+一般不单独部署它：后端仓的 [docker-compose.yml](https://github.com/Victor-ChanX/interviewProjects-backend/blob/main/docker-compose.yml)
+直接从本仓 GitHub 地址构建它，与后端、模拟器、数据库一起拉起；Dokploy 的步骤见后端仓的
+[部署文档](https://github.com/Victor-ChanX/interviewProjects-backend/blob/main/docs/deploy.md)。

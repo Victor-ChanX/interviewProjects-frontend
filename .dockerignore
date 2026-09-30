@@ -1,0 +1,10 @@
+# 镜像只要能 npm ci + npm run build；下面这些进了构建上下文只会变大、或把本地状态带进去
+node_modules
+dist
+coverage
+.git
+.github
+test-results
+playwright-report
+.env
+.env.*
