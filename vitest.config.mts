@@ -23,6 +23,7 @@ export default defineConfig({
     // 关掉 Node 的 webstorage 让 jsdom 的 localStorage 正常暴露。
     execArgv: ["--no-experimental-webstorage"],
     // 覆盖率地板（CI 跑 npm run test:coverage；本地 npm test 不带覆盖率，保持秒级）。
+    // 范围 = 必须带同位测试的那几类：lib / services / hooks /
     // *-schema.ts。组件按约定不写渲染测试（浏览器验证兜底），算进来只会把数字
     // 压到十几个点、失去信号。
     // 覆盖率地板只防倒退、只准上调。出厂占位 0：首次 npm run test:coverage 实测后

@@ -1,4 +1,5 @@
 // Tailwind 颜色类的识别口径，eslint.config.mjs（中性色直接拦）与
+// 与写死颜色的按文件冻结检查共用一份，免得两张网的前缀表
 // 各写各的 —— 审查时发现过 eslint 那份只有 bg|text|border|ring|fill|divide|from|
 // via|to，`border-t-gray-200`、`stroke-slate-400`、`placeholder-gray-400`、
 // `ring-offset-gray-100` 都能过。
