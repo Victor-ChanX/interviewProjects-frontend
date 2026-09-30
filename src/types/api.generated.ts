@@ -363,10 +363,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 工作台概览：账号 / 群 / 今日消息 / Agent 运行 / 序列 / job / 待处理异常的计数（今日按业务时区自然日） */
+        /** 工作台概览：账号 / 群 / 今日消息 / Agent 运行 / 序列 / job / 待处理异常的计数（今日按 timeZone 参数的自然日，默认 UTC） */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    timeZone?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -728,6 +730,51 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["SequenceRunStarted"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/groups/{id}/simulate-inbound": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 演示用：以外部成员身份往群里推一条消息（经网关模拟器，随后照常进入时间线并可触发 Agent） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        senderPlatformUserId: string;
+                        text: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SimulateInboundResponse"];
                     };
                 };
             };
@@ -1156,6 +1203,42 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sim-controls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 演示用模拟控制是否打开（SIM_CONTROLS_ENABLED） */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SimControlsRead"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1940,6 +2023,18 @@ export interface components {
         SequenceStepStatus: "pending" | "accepted" | "sent" | "skipped" | "failed";
         /** @enum {string} */
         SequenceStepStatusInput: "pending" | "accepted" | "sent" | "skipped" | "failed";
+        SimControlsRead: {
+            enabled: boolean;
+        };
+        SimControlsReadInput: {
+            enabled: boolean;
+        };
+        SimulateInboundResponse: {
+            gatewayGroupId: string;
+        };
+        SimulateInboundResponseInput: {
+            gatewayGroupId: string;
+        };
     };
     responses: never;
     parameters: never;
