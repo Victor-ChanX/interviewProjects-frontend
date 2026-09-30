@@ -1,83 +1,45 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  CUSTOM_PROVIDER_ID,
-  findLlmProviderId,
-  getLlmProvider,
+  getLlmProviderLabel,
+  isLlmProviderId,
+  LLM_PROVIDER_IDS,
   LLM_PROVIDERS,
-  normalizeLlmBaseUrl,
 } from "@/lib/llm-providers";
 
 describe("LLM_PROVIDERS", () => {
-  it("lists the presets in order with officially documented base URLs", () => {
+  it("lists exactly Claude and Gemini, in order", () => {
     expect(LLM_PROVIDERS).toEqual([
-      {
-        id: "deepseek",
-        label: "DeepSeek",
-        baseUrl: "https://api.deepseek.com",
-      },
-      {
-        id: "moonshot",
-        label: "Kimi（Moonshot）",
-        baseUrl: "https://api.moonshot.ai/v1",
-      },
-      {
-        id: "mimo",
-        label: "小米 MiMo",
-        baseUrl: "https://api.xiaomimimo.com/v1",
-      },
-      {
-        id: "gemini",
-        label: "Gemini（OpenAI 兼容）",
-        baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
-      },
-      { id: "custom", label: "自定义", baseUrl: "" },
+      { id: "anthropic", label: "Claude（Anthropic）" },
+      { id: "gemini", label: "Gemini（Google）" },
     ]);
   });
 
-  it("has unique ids", () => {
-    const ids = LLM_PROVIDERS.map((provider) => provider.id);
-
-    expect(new Set(ids).size).toBe(ids.length);
+  it("covers every provider id exactly once", () => {
+    expect(LLM_PROVIDERS.map((provider) => provider.id)).toEqual([
+      ...LLM_PROVIDER_IDS,
+    ]);
   });
 });
 
-describe("normalizeLlmBaseUrl", () => {
-  it("trims whitespace and trailing slashes only", () => {
-    expect(normalizeLlmBaseUrl("  https://a.com/v1//  ")).toBe(
-      "https://a.com/v1",
-    );
-    expect(normalizeLlmBaseUrl("https://a.com/v1")).toBe("https://a.com/v1");
-    expect(normalizeLlmBaseUrl("")).toBe("");
+describe("isLlmProviderId", () => {
+  it("accepts only the two provider ids", () => {
+    expect(isLlmProviderId("anthropic")).toBe(true);
+    expect(isLlmProviderId("gemini")).toBe(true);
+    expect(isLlmProviderId("")).toBe(false);
+    expect(isLlmProviderId("openai")).toBe(false);
+    expect(isLlmProviderId("Anthropic")).toBe(false);
+    expect(isLlmProviderId(null)).toBe(false);
+    expect(isLlmProviderId(undefined)).toBe(false);
   });
 });
 
-describe("getLlmProvider", () => {
-  it("returns the preset by id, undefined for unknown ids", () => {
-    expect(getLlmProvider("deepseek")?.baseUrl).toBe(
-      "https://api.deepseek.com",
-    );
-    expect(getLlmProvider("nope")).toBeUndefined();
-  });
-});
-
-describe("findLlmProviderId", () => {
-  it("matches a saved base URL to its preset, ignoring the trailing slash", () => {
-    expect(findLlmProviderId("https://api.moonshot.ai/v1")).toBe("moonshot");
-    // 后端保存时去掉了末尾的 /，Gemini 预设带 /，仍要认出来。
-    expect(
-      findLlmProviderId(
-        "https://generativelanguage.googleapis.com/v1beta/openai",
-      ),
-    ).toBe("gemini");
-  });
-
-  it("falls back to custom for unknown, empty or missing URLs", () => {
-    expect(findLlmProviderId("https://llm.example.com/v1")).toBe(
-      CUSTOM_PROVIDER_ID,
-    );
-    expect(findLlmProviderId("")).toBe(CUSTOM_PROVIDER_ID);
-    expect(findLlmProviderId(null)).toBe(CUSTOM_PROVIDER_ID);
-    expect(findLlmProviderId(undefined)).toBe(CUSTOM_PROVIDER_ID);
+describe("getLlmProviderLabel", () => {
+  it("returns the label by id, '-' for unknown or missing ids", () => {
+    expect(getLlmProviderLabel("anthropic")).toBe("Claude（Anthropic）");
+    expect(getLlmProviderLabel("gemini")).toBe("Gemini（Google）");
+    expect(getLlmProviderLabel("openai")).toBe("-");
+    expect(getLlmProviderLabel(null)).toBe("-");
+    expect(getLlmProviderLabel(undefined)).toBe("-");
   });
 });

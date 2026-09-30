@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-// LLM 设置 hook：获取模型列表后可选；按错误码给中文提示并标在 key 输入框上；本地先拦「需要新 key」；
+// LLM 设置 hook：服务商只有 Claude / Gemini 且必选；获取模型列表（带 provider）后可选，下拉显示 displayName；
+// 按错误码给中文提示并标在 key 输入框上；本地先拦「需要新 key」（没存过或换了服务商）；
 // 保存后清空 key（且 key 不进 query / mutation 缓存、不进 storage）；viewer 只读、unsupported 禁用写操作。
 // service 层与 sonner 都 mock。
 
@@ -10,11 +11,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   API_KEY_REQUIRED_MESSAGE,
-  BASE_URL_INVALID_MESSAGE,
+  PROVIDER_REQUIRED_MESSAGE,
   UNSUPPORTED_MESSAGE,
 } from "@/components/llm-settings/llm-settings-schema";
 import {
   describeLlmError,
+  toModelOptions,
   useLlmSettings,
 } from "@/components/llm-settings/use-llm-settings";
 import { RequestError } from "@/lib/request";
@@ -38,8 +40,8 @@ vi.mock("@/services/llm-settings-service", async (importOriginal) => ({
 const SECRET = "sk-test-not-a-real-key-1234";
 
 const SAVED: LlmSettingsRead = {
-  baseUrl: "https://api.deepseek.com",
-  model: "deepseek-chat",
+  provider: "anthropic",
+  model: "claude-sonnet-4-5",
   auditModel: null,
   hasApiKey: true,
   apiKeyHint: "sk-…abcd",
@@ -49,7 +51,7 @@ const SAVED: LlmSettingsRead = {
 };
 
 const NONE: LlmSettingsRead = {
-  baseUrl: null,
+  provider: null,
   model: null,
   auditModel: null,
   hasApiKey: false,
@@ -61,10 +63,15 @@ const NONE: LlmSettingsRead = {
 
 const MODELS = {
   items: [
-    { id: "deepseek-chat", ownedBy: "deepseek" },
-    { id: "deepseek-reasoner", ownedBy: "deepseek" },
+    { id: "claude-sonnet-4-5", displayName: "Claude Sonnet 4.5" },
+    { id: "claude-haiku-4-5", displayName: "Claude Haiku 4.5" },
   ],
   total: 2,
+};
+
+const GEMINI_MODELS = {
+  items: [{ id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro" }],
+  total: 1,
 };
 
 function setup(settings: LlmSettingsRead, canWrite = true) {
@@ -81,15 +88,14 @@ function setup(settings: LlmSettingsRead, canWrite = true) {
   return { ...hook, queryClient };
 }
 
-/** 模拟在输入框里打字（register 的 onChange 只读 event.target）。 */
-async function type(
+/** 模拟在 key 输入框里打字（register 的 onChange 只读 event.target）。 */
+async function typeKey(
   current: ReturnType<typeof useLlmSettings>,
-  name: "apiKey" | "baseUrl",
   value: string,
 ) {
   await act(async () => {
-    await current.register(name).onChange({
-      target: { name, value },
+    await current.register("apiKey").onChange({
+      target: { name: "apiKey", value },
       type: "change",
     });
   });
@@ -110,59 +116,73 @@ describe("useLlmSettings: loading", () => {
     const { result } = setup(SAVED);
 
     await waitFor(() => expect(result.current.settings).toEqual(SAVED));
-    await waitFor(() => expect(result.current.model).toBe("deepseek-chat"));
-    expect(result.current.providerId).toBe("deepseek");
+    await waitFor(() => expect(result.current.model).toBe("claude-sonnet-4-5"));
+    expect(result.current.provider).toBe("anthropic");
     expect(result.current.writable).toBe(true);
-    // 没获取过列表：选项里只有已保存的模型，能显示当前值。
-    expect(result.current.modelOptions).toEqual(["deepseek-chat"]);
+    // 没获取过列表：选项里只有已保存的模型（显示 id），能显示当前值。
+    expect(result.current.modelOptions).toEqual([
+      { value: "claude-sonnet-4-5", label: "claude-sonnet-4-5" },
+    ]);
     expect(result.current.modelsFetched).toBe(false);
+  });
+
+  it("starts with no provider selected when nothing is configured", async () => {
+    const { result } = setup(NONE);
+
+    await waitFor(() => expect(result.current.settings).toEqual(NONE));
+    expect(result.current.provider).toBe("");
+    expect(result.current.modelOptions).toEqual([]);
   });
 });
 
 describe("useLlmSettings: fetch models", () => {
-  it("sends baseUrl + key and makes the fetched models selectable", async () => {
-    service.listLlmModels.mockResolvedValue(MODELS);
+  it("sends provider + key and lists models by displayName", async () => {
+    service.listLlmModels.mockResolvedValue(GEMINI_MODELS);
 
     const { result } = setup(NONE);
 
     await waitFor(() => expect(result.current.settings).toEqual(NONE));
-    act(() => result.current.changeProvider("deepseek"));
-    await type(result.current, "apiKey", SECRET);
+    act(() => result.current.changeProvider("gemini"));
+    await typeKey(result.current, SECRET);
     await act(() => result.current.fetchModels());
 
     expect(service.listLlmModels).toHaveBeenCalledWith({
-      baseUrl: "https://api.deepseek.com",
+      provider: "gemini",
       apiKey: SECRET,
     });
     expect(result.current.modelsFetched).toBe(true);
-    expect(result.current.modelsCount).toBe(2);
+    expect(result.current.modelsCount).toBe(1);
     expect(result.current.modelOptions).toEqual([
-      "deepseek-chat",
-      "deepseek-reasoner",
+      { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
     ]);
 
-    act(() => result.current.setModel("deepseek-reasoner"));
-    expect(result.current.model).toBe("deepseek-reasoner");
+    act(() => result.current.setModel("gemini-2.5-pro"));
+    expect(result.current.model).toBe("gemini-2.5-pro");
   });
 
-  it("reuses the saved key (no apiKey in the body) for the same base URL", async () => {
+  it("reuses the saved key (no apiKey in the body) for the same provider", async () => {
     service.listLlmModels.mockResolvedValue(MODELS);
 
     const { result } = setup(SAVED);
 
-    await waitFor(() => expect(result.current.model).toBe("deepseek-chat"));
+    await waitFor(() => expect(result.current.model).toBe("claude-sonnet-4-5"));
     await act(() => result.current.fetchModels());
 
     expect(service.listLlmModels).toHaveBeenCalledWith({
-      baseUrl: "https://api.deepseek.com",
+      provider: "anthropic",
     });
+    // 已保存的模型在列表里：按 displayName 显示，不重复。
+    expect(result.current.modelOptions).toEqual([
+      { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+      { value: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+    ]);
   });
 
-  it("blocks locally when a new key is needed, without calling the backend", async () => {
+  it("blocks locally when the provider changed and no new key is given", async () => {
     const { result } = setup(SAVED);
 
-    await waitFor(() => expect(result.current.model).toBe("deepseek-chat"));
-    act(() => result.current.changeProvider("moonshot"));
+    await waitFor(() => expect(result.current.model).toBe("claude-sonnet-4-5"));
+    act(() => result.current.changeProvider("gemini"));
     await act(() => result.current.fetchModels());
 
     expect(service.listLlmModels).not.toHaveBeenCalled();
@@ -171,17 +191,16 @@ describe("useLlmSettings: fetch models", () => {
     );
   });
 
-  it("validates the base URL before fetching", async () => {
+  it("requires a provider before fetching", async () => {
     const { result } = setup(NONE);
 
     await waitFor(() => expect(result.current.settings).toEqual(NONE));
-    await type(result.current, "baseUrl", "api.deepseek.com");
-    await type(result.current, "apiKey", SECRET);
+    await typeKey(result.current, SECRET);
     await act(() => result.current.fetchModels());
 
     expect(service.listLlmModels).not.toHaveBeenCalled();
-    expect(result.current.errors.baseUrl?.message).toBe(
-      BASE_URL_INVALID_MESSAGE,
+    expect(result.current.errors.provider?.message).toBe(
+      PROVIDER_REQUIRED_MESSAGE,
     );
   });
 
@@ -195,13 +214,13 @@ describe("useLlmSettings: fetch models", () => {
     [
       422,
       "LLM_API_KEY_REQUIRED",
-      "需要重新输入 API Key：还没有保存过 key，或 Base URL 与已保存的不同，不能沿用",
+      "需要重新输入 API Key：还没有保存过 key，或服务商与已保存的不同，不能沿用",
       true,
     ],
     [
       502,
       "LLM_UPSTREAM_ERROR",
-      "上游不可达：连不上服务商或服务商返回异常，请检查 Base URL 与网络",
+      "上游不可达：连不上服务商或服务商返回异常，请检查网络后重试",
       false,
     ],
     [409, "LLM_AGENT_UNSUPPORTED", UNSUPPORTED_MESSAGE, false],
@@ -212,8 +231,10 @@ describe("useLlmSettings: fetch models", () => {
 
       const { result } = setup(SAVED);
 
-      await waitFor(() => expect(result.current.model).toBe("deepseek-chat"));
-      await type(result.current, "apiKey", SECRET);
+      await waitFor(() =>
+        expect(result.current.model).toBe("claude-sonnet-4-5"),
+      );
+      await typeKey(result.current, SECRET);
       await act(() => result.current.fetchModels());
 
       // key 的问题只标在 key 输入框上；其它错误显示在按钮下方。
@@ -226,44 +247,93 @@ describe("useLlmSettings: fetch models", () => {
     },
   );
 
-  it("flags a list fetched for another base URL as stale and drops it on provider change", async () => {
+  it("drops the list and the chosen models on provider change", async () => {
     service.listLlmModels.mockResolvedValue(MODELS);
 
     const { result } = setup(SAVED);
 
-    await waitFor(() => expect(result.current.model).toBe("deepseek-chat"));
+    await waitFor(() => expect(result.current.model).toBe("claude-sonnet-4-5"));
     await act(() => result.current.fetchModels());
-    expect(result.current.modelsStale).toBe(false);
+    act(() => result.current.setAuditModel("claude-haiku-4-5"));
+    expect(result.current.modelsFetched).toBe(true);
 
-    await type(result.current, "baseUrl", "https://api.deepseek.com/v1");
-    expect(result.current.modelsStale).toBe(true);
-
-    act(() => result.current.changeProvider("custom"));
+    act(() => result.current.changeProvider("gemini"));
+    expect(result.current.provider).toBe("gemini");
     expect(result.current.modelsFetched).toBe(false);
     expect(result.current.model).toBe("");
+    expect(result.current.auditModel).toBe("");
+    expect(result.current.modelOptions).toEqual([]);
+  });
+
+  it("ignores a list that arrives after the provider was switched", async () => {
+    let resolve: (value: typeof MODELS) => void = () => {};
+
+    service.listLlmModels.mockReturnValue(
+      new Promise((r) => {
+        resolve = r;
+      }),
+    );
+
+    const { result } = setup(SAVED);
+
+    await waitFor(() => expect(result.current.model).toBe("claude-sonnet-4-5"));
+
+    let pending: Promise<void> = Promise.resolve();
+
+    act(() => {
+      pending = result.current.fetchModels();
+    });
+    act(() => result.current.changeProvider("gemini"));
+    await act(async () => {
+      resolve(MODELS);
+      await pending;
+    });
+
+    expect(result.current.provider).toBe("gemini");
+    expect(result.current.modelsFetched).toBe(false);
+    expect(result.current.modelOptions).toEqual([]);
+  });
+});
+
+describe("toModelOptions", () => {
+  it("labels by displayName and appends selected ids missing from the list once", () => {
+    expect(
+      toModelOptions(
+        [
+          { id: "a", displayName: "Model A" },
+          { id: "b", displayName: "" },
+        ],
+        ["a", "saved", "", "saved"],
+      ),
+    ).toEqual([
+      { value: "a", label: "Model A" },
+      { value: "b", label: "b" },
+      { value: "saved", label: "saved" },
+    ]);
+    expect(toModelOptions([], [])).toEqual([]);
   });
 });
 
 describe("useLlmSettings: save", () => {
   it("saves, updates the cache, clears the key, and never keeps the key anywhere", async () => {
-    const saved = { ...SAVED, auditModel: "deepseek-reasoner" };
+    const saved = { ...SAVED, auditModel: "claude-haiku-4-5" };
 
     service.listLlmModels.mockResolvedValue(MODELS);
     service.saveLlmSettings.mockResolvedValue(saved);
 
     const { result, queryClient } = setup(SAVED);
 
-    await waitFor(() => expect(result.current.model).toBe("deepseek-chat"));
-    await type(result.current, "apiKey", SECRET);
+    await waitFor(() => expect(result.current.model).toBe("claude-sonnet-4-5"));
+    await typeKey(result.current, SECRET);
     await act(() => result.current.fetchModels());
-    act(() => result.current.setAuditModel("deepseek-reasoner"));
+    act(() => result.current.setAuditModel("claude-haiku-4-5"));
     await act(() => result.current.submit());
 
     expect(service.saveLlmSettings).toHaveBeenCalledWith({
-      baseUrl: "https://api.deepseek.com",
+      provider: "anthropic",
       apiKey: SECRET,
-      model: "deepseek-chat",
-      auditModel: "deepseek-reasoner",
+      model: "claude-sonnet-4-5",
+      auditModel: "claude-haiku-4-5",
     });
     expect(toast.success).toHaveBeenCalledWith("LLM 配置已保存");
     await waitFor(() => expect(result.current.settings).toEqual(saved));
@@ -286,22 +356,53 @@ describe("useLlmSettings: save", () => {
     // key 输入框已清空：再保存一次，请求体里不再带 key（沿用已保存的）。
     await act(() => result.current.submit());
     expect(service.saveLlmSettings).toHaveBeenLastCalledWith({
-      baseUrl: "https://api.deepseek.com",
-      model: "deepseek-chat",
-      auditModel: "deepseek-reasoner",
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      auditModel: "claude-haiku-4-5",
     });
   });
 
-  it("requires a chat model", async () => {
+  it("requires a provider and a chat model", async () => {
     const { result } = setup(NONE);
 
     await waitFor(() => expect(result.current.settings).toEqual(NONE));
-    act(() => result.current.changeProvider("deepseek"));
-    await type(result.current, "apiKey", SECRET);
+    await typeKey(result.current, SECRET);
     await act(() => result.current.submit());
 
     expect(service.saveLlmSettings).not.toHaveBeenCalled();
+    expect(result.current.errors.provider?.message).toBe(
+      PROVIDER_REQUIRED_MESSAGE,
+    );
     expect(result.current.errors.model?.message).toBe("请选择对话模型");
+  });
+
+  it("switching provider needs a new key before saving", async () => {
+    const { result } = setup(SAVED);
+
+    await waitFor(() => expect(result.current.model).toBe("claude-sonnet-4-5"));
+    act(() => result.current.changeProvider("gemini"));
+    act(() => result.current.setModel("gemini-2.5-pro"));
+    await act(() => result.current.submit());
+
+    expect(service.saveLlmSettings).not.toHaveBeenCalled();
+    expect(result.current.errors.apiKey?.message).toBe(
+      API_KEY_REQUIRED_MESSAGE,
+    );
+
+    service.saveLlmSettings.mockResolvedValue({
+      ...SAVED,
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+    });
+    await typeKey(result.current, SECRET);
+    await act(() => result.current.submit());
+
+    expect(service.saveLlmSettings).toHaveBeenCalledWith({
+      provider: "gemini",
+      apiKey: SECRET,
+      model: "gemini-2.5-pro",
+      auditModel: null,
+    });
   });
 
   it("toasts the Chinese hint and marks the key field on 422 LLM_API_KEY_REQUIRED", async () => {
@@ -311,11 +412,11 @@ describe("useLlmSettings: save", () => {
 
     const { result } = setup(SAVED);
 
-    await waitFor(() => expect(result.current.model).toBe("deepseek-chat"));
+    await waitFor(() => expect(result.current.model).toBe("claude-sonnet-4-5"));
     await act(() => result.current.submit());
 
     const message =
-      "需要重新输入 API Key：还没有保存过 key，或 Base URL 与已保存的不同，不能沿用";
+      "需要重新输入 API Key：还没有保存过 key，或服务商与已保存的不同，不能沿用";
 
     expect(toast.error).toHaveBeenCalledWith(message);
     expect(result.current.errors.apiKey?.message).toBe(message);
@@ -328,7 +429,7 @@ describe("useLlmSettings: test connection", () => {
     const outcome = {
       ok: true,
       latencyMs: 321,
-      model: "deepseek-chat",
+      model: "claude-sonnet-4-5",
       message: "pong",
     };
 
@@ -355,7 +456,7 @@ describe("useLlmSettings: test connection", () => {
 
     await waitFor(() =>
       expect(result.current.testError).toBe(
-        "上游不可达：连不上服务商或服务商返回异常，请检查 Base URL 与网络",
+        "上游不可达：连不上服务商或服务商返回异常，请检查网络后重试",
       ),
     );
   });
@@ -384,7 +485,7 @@ describe("useLlmSettings: read-only modes", () => {
     await waitFor(() => expect(result.current.supported).toBe(false));
     expect(result.current.writable).toBe(false);
 
-    await type(result.current, "apiKey", SECRET);
+    await typeKey(result.current, SECRET);
     await act(() => result.current.fetchModels());
     await act(() => result.current.submit());
     act(() => result.current.runTest());

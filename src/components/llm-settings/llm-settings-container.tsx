@@ -25,9 +25,11 @@ export function LlmSettingsContainer() {
     void onFetchModels();
   }, [onFetchModels]);
 
-  const apiKeyPlaceholder = settings?.hasApiKey
-    ? `已保存：${settings.apiKeyHint ?? "…"}（留空则沿用）`
-    : "填写服务商的 API Key";
+  // 只有「已存过 key 且服务商没变」才能留空沿用（与后端同口径）。
+  const apiKeyPlaceholder =
+    settings?.hasApiKey && state.provider === settings.provider
+      ? `已保存：${settings.apiKeyHint ?? "…"}（留空则沿用）`
+      : "填写服务商的 API Key";
 
   const form = useMemo<LlmSettingsFormViewProps | null>(
     () =>
@@ -36,7 +38,7 @@ export function LlmSettingsContainer() {
             register: state.register,
             errors: state.errors,
             providers: LLM_PROVIDERS,
-            providerId: state.providerId,
+            provider: state.provider,
             onProviderChange: state.changeProvider,
             apiKeyPlaceholder,
             model: state.model,
@@ -46,7 +48,6 @@ export function LlmSettingsContainer() {
             modelOptions: state.modelOptions,
             modelsFetched: state.modelsFetched,
             modelsCount: state.modelsCount,
-            modelsStale: state.modelsStale,
             modelsLoading: state.modelsLoading,
             modelsError: state.modelsError,
             onFetchModels: handleFetchModels,
@@ -68,8 +69,7 @@ export function LlmSettingsContainer() {
       state.modelsError,
       state.modelsFetched,
       state.modelsLoading,
-      state.modelsStale,
-      state.providerId,
+      state.provider,
       state.register,
       state.saving,
       state.setAuditModel,

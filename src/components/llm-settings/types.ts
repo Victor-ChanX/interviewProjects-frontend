@@ -1,32 +1,33 @@
 import type { FormEvent } from "react";
 import type { FieldErrors, UseFormRegister } from "react-hook-form";
 
+import type { SearchableSelectOption } from "@/components/ui-atoms/searchable-select";
 import type { LlmProvider } from "@/lib/llm-providers";
 import type {
   LlmSettingsRead,
   LlmTestResult,
 } from "@/services/llm-settings-service";
 
-import type { LlmSettingsFormValues } from "./llm-settings-schema";
+import type { LlmSettingsFormInput } from "./llm-settings-schema";
 
-/** 编辑表单（admin 才有）：预设 → Base URL → API Key → 获取模型列表 → 两个模型下拉 → 保存。 */
+/** 编辑表单（admin 才有）：服务商 → API Key → 获取模型列表 → 两个模型下拉 → 保存。 */
 export interface LlmSettingsFormViewProps {
-  register: UseFormRegister<LlmSettingsFormValues>;
-  errors: FieldErrors<LlmSettingsFormValues>;
+  register: UseFormRegister<LlmSettingsFormInput>;
+  errors: FieldErrors<LlmSettingsFormInput>;
   providers: readonly LlmProvider[];
-  providerId: string;
+  /** 空串 = 还没选。 */
+  provider: string;
   onProviderChange: (id: string) => void;
-  /** 已存有 key 时是「已保存：sk-…abcd（留空则沿用）」，否则提示填写。 */
+  /** 已存有同一服务商的 key 时是「已保存：sk-…abcd（留空则沿用）」，否则提示填写。 */
   apiKeyPlaceholder: string;
   model: string;
   auditModel: string;
   onModelChange: (value: string) => void;
   onAuditModelChange: (value: string) => void;
-  modelOptions: string[];
+  /** 显示 displayName，值是模型 id。 */
+  modelOptions: readonly SearchableSelectOption[];
   modelsFetched: boolean;
   modelsCount: number;
-  /** 列表是用另一个 Base URL 拿到的：提示重新获取。 */
-  modelsStale: boolean;
   modelsLoading: boolean;
   /** 获取模型列表失败的中文提示（按错误码；key 的问题在 errors.apiKey 里）；null 无。 */
   modelsError: string | null;

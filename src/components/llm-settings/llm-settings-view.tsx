@@ -55,7 +55,7 @@ export function LlmSettingsView({
       <header>
         <h1 className="text-lg font-semibold">模型设置</h1>
         <p className="text-sm text-muted-foreground">
-          LLM Agent 调用的 OpenAI 兼容服务：Base URL、API Key 与模型
+          LLM Agent 调用的模型服务：Claude 或 Gemini 的 API Key 与模型
         </p>
       </header>
 

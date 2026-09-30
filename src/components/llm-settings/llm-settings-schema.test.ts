@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  BASE_URL_INVALID_MESSAGE,
-  BASE_URL_REQUIRED_MESSAGE,
   llmSettingsSchema,
   MODEL_REQUIRED_MESSAGE,
   needsNewApiKey,
+  PROVIDER_REQUIRED_MESSAGE,
   toListLlmModelsPayload,
   toLlmFormValues,
   toSaveLlmSettingsPayload,
@@ -13,8 +12,8 @@ import {
 import type { LlmSettingsRead } from "@/services/llm-settings-service";
 
 const SAVED: LlmSettingsRead = {
-  baseUrl: "https://api.deepseek.com",
-  model: "deepseek-chat",
+  provider: "anthropic",
+  model: "claude-sonnet-4-5",
   auditModel: null,
   hasApiKey: true,
   apiKeyHint: "sk-…abcd",
@@ -24,10 +23,9 @@ const SAVED: LlmSettingsRead = {
 };
 
 const VALID = {
-  providerId: "deepseek",
-  baseUrl: "https://api.deepseek.com",
+  provider: "anthropic" as const,
   apiKey: "",
-  model: "deepseek-chat",
+  model: "claude-sonnet-4-5",
   auditModel: "",
 };
 
@@ -38,39 +36,27 @@ function messages(input: unknown): string[] {
 }
 
 describe("llmSettingsSchema", () => {
-  it("accepts http and https base URLs and trims every text field", () => {
+  it("accepts both providers and trims every text field", () => {
     expect(
       llmSettingsSchema.parse({
-        ...VALID,
-        baseUrl: "  http://localhost:8000/v1 ",
-        apiKey: " sk-x ",
+        provider: "gemini",
+        apiKey: " key-x ",
         model: " m ",
         auditModel: " a ",
       }),
     ).toEqual({
-      providerId: "deepseek",
-      baseUrl: "http://localhost:8000/v1",
-      apiKey: "sk-x",
+      provider: "gemini",
+      apiKey: "key-x",
       model: "m",
       auditModel: "a",
     });
+    expect(messages(VALID)).toEqual([]);
   });
 
-  it("requires a base URL", () => {
-    expect(messages({ ...VALID, baseUrl: "   " })).toEqual([
-      BASE_URL_REQUIRED_MESSAGE,
-    ]);
-  });
-
-  it("rejects non-http(s) and malformed URLs", () => {
-    for (const baseUrl of [
-      "ftp://api.deepseek.com",
-      "api.deepseek.com",
-      "javascript:alert(1)",
-      "https://",
-    ])
-      expect(messages({ ...VALID, baseUrl })).toEqual([
-        BASE_URL_INVALID_MESSAGE,
+  it("requires a provider, and only Claude or Gemini", () => {
+    for (const provider of ["", "openai", "claude", "Anthropic", "custom"])
+      expect(messages({ ...VALID, provider })).toEqual([
+        PROVIDER_REQUIRED_MESSAGE,
       ]);
   });
 
@@ -83,65 +69,54 @@ describe("llmSettingsSchema", () => {
 });
 
 describe("toLlmFormValues", () => {
-  it("fills from saved settings, derives the preset and never fills the key", () => {
+  it("fills from saved settings and never fills the key", () => {
     expect(
-      toLlmFormValues({ ...SAVED, auditModel: "deepseek-reasoner" }),
+      toLlmFormValues({ ...SAVED, auditModel: "claude-haiku-4-5" }),
     ).toEqual({
-      providerId: "deepseek",
-      baseUrl: "https://api.deepseek.com",
+      provider: "anthropic",
       apiKey: "",
-      model: "deepseek-chat",
-      auditModel: "deepseek-reasoner",
+      model: "claude-sonnet-4-5",
+      auditModel: "claude-haiku-4-5",
     });
   });
 
-  it("starts empty on the custom preset when nothing is configured", () => {
-    expect(toLlmFormValues(undefined)).toEqual({
-      providerId: "custom",
-      baseUrl: "",
-      apiKey: "",
-      model: "",
-      auditModel: "",
-    });
+  it("starts with no provider selected when nothing is configured", () => {
+    const empty = { provider: "", apiKey: "", model: "", auditModel: "" };
+
+    expect(toLlmFormValues(undefined)).toEqual(empty);
     expect(
       toLlmFormValues({
         ...SAVED,
-        baseUrl: null,
+        provider: null,
         model: null,
         hasApiKey: false,
         apiKeyHint: null,
         updatedAt: null,
         source: "none",
       }),
-    ).toEqual({
-      providerId: "custom",
-      baseUrl: "",
-      apiKey: "",
-      model: "",
-      auditModel: "",
-    });
+    ).toEqual(empty);
   });
 });
 
 describe("needsNewApiKey", () => {
-  it("is false only when a key is saved for the same base URL (trailing slash ignored)", () => {
-    expect(needsNewApiKey("https://api.deepseek.com/", SAVED)).toBe(false);
-    expect(needsNewApiKey("https://api.moonshot.ai/v1", SAVED)).toBe(true);
-    expect(needsNewApiKey("https://api.deepseek.com", undefined)).toBe(true);
-    expect(
-      needsNewApiKey("https://api.deepseek.com", {
-        ...SAVED,
-        hasApiKey: false,
-      }),
-    ).toBe(true);
+  it("is false only when a key is saved for the same provider", () => {
+    expect(needsNewApiKey("anthropic", SAVED)).toBe(false);
+    expect(needsNewApiKey("gemini", SAVED)).toBe(true);
+    expect(needsNewApiKey("anthropic", undefined)).toBe(true);
+    expect(needsNewApiKey("anthropic", { ...SAVED, hasApiKey: false })).toBe(
+      true,
+    );
+    expect(needsNewApiKey("anthropic", { ...SAVED, provider: null })).toBe(
+      true,
+    );
   });
 });
 
 describe("toSaveLlmSettingsPayload", () => {
   it("omits an empty key and sends null for an empty audit model", () => {
     expect(toSaveLlmSettingsPayload(VALID)).toEqual({
-      baseUrl: "https://api.deepseek.com",
-      model: "deepseek-chat",
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
       auditModel: null,
     });
   });
@@ -150,26 +125,28 @@ describe("toSaveLlmSettingsPayload", () => {
     expect(
       toSaveLlmSettingsPayload({
         ...VALID,
-        apiKey: "sk-new",
-        auditModel: "deepseek-reasoner",
+        provider: "gemini",
+        apiKey: "key-new",
+        model: "gemini-2.5-pro",
+        auditModel: "gemini-2.5-flash",
       }),
     ).toEqual({
-      baseUrl: "https://api.deepseek.com",
-      apiKey: "sk-new",
-      model: "deepseek-chat",
-      auditModel: "deepseek-reasoner",
+      provider: "gemini",
+      apiKey: "key-new",
+      model: "gemini-2.5-pro",
+      auditModel: "gemini-2.5-flash",
     });
   });
 });
 
 describe("toListLlmModelsPayload", () => {
-  it("trims both fields and omits an empty key", () => {
-    expect(toListLlmModelsPayload(" https://a.com/v1 ", "  ")).toEqual({
-      baseUrl: "https://a.com/v1",
+  it("sends the provider, trims the key and omits it when empty", () => {
+    expect(toListLlmModelsPayload("gemini", "  ")).toEqual({
+      provider: "gemini",
     });
-    expect(toListLlmModelsPayload("https://a.com/v1", " sk-x ")).toEqual({
-      baseUrl: "https://a.com/v1",
-      apiKey: "sk-x",
+    expect(toListLlmModelsPayload("anthropic", " key-x ")).toEqual({
+      provider: "anthropic",
+      apiKey: "key-x",
     });
   });
 });

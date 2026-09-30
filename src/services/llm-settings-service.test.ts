@@ -21,8 +21,8 @@ beforeEach(() => {
 });
 
 const SETTINGS = {
-  baseUrl: "https://api.deepseek.com",
-  model: "deepseek-chat",
+  provider: "anthropic" as const,
+  model: "claude-sonnet-4-5",
   auditModel: null,
   hasApiKey: true,
   apiKeyHint: "sk-…abcd",
@@ -43,9 +43,9 @@ describe("getLlmSettings", () => {
 describe("saveLlmSettings", () => {
   it("PUTs the payload to /api/llm/settings", async () => {
     const payload = {
-      baseUrl: "https://api.deepseek.com",
+      provider: "anthropic" as const,
       apiKey: "sk-test",
-      model: "deepseek-chat",
+      model: "claude-sonnet-4-5",
       auditModel: null,
     };
 
@@ -57,19 +57,23 @@ describe("saveLlmSettings", () => {
 });
 
 describe("listLlmModels", () => {
-  it("POSTs { baseUrl, apiKey? } to /api/llm/models", async () => {
+  it("POSTs { provider, apiKey? } to /api/llm/models", async () => {
     const body = {
-      items: [{ id: "deepseek-chat", ownedBy: "deepseek" }],
+      items: [{ id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro" }],
       total: 1,
     };
 
     api.post.mockResolvedValue(body);
 
-    await expect(
-      listLlmModels({ baseUrl: "https://api.deepseek.com" }),
-    ).resolves.toEqual(body);
+    await expect(listLlmModels({ provider: "gemini" })).resolves.toEqual(body);
     expect(api.post).toHaveBeenCalledWith("/api/llm/models", {
-      baseUrl: "https://api.deepseek.com",
+      provider: "gemini",
+    });
+
+    await listLlmModels({ provider: "anthropic", apiKey: "sk-test" });
+    expect(api.post).toHaveBeenLastCalledWith("/api/llm/models", {
+      provider: "anthropic",
+      apiKey: "sk-test",
     });
   });
 });

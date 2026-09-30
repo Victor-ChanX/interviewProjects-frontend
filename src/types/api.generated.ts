@@ -123,6 +123,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 最近动态：WS 事件（白名单类型）按 seq 倒序，游标分页；首屏用它，之后靠 WS 追加 */
+        get: {
+            parameters: {
+                query?: {
+                    before?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityPage"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 全部群的 agent run 列表：可按状态、群筛选，按创建时间倒序游标分页（不含 steps） */
+        get: {
+            parameters: {
+                query?: {
+                    status?: components["schemas"]["AgentRunStatusInput"];
+                    groupId?: string;
+                    before?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AgentRunPage"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent-runs/{id}": {
         parameters: {
             query?: never;
@@ -270,6 +350,42 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dashboard/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 工作台概览：账号 / 群 / 今日消息 / Agent 运行 / 序列 / job / 待处理异常的计数（今日按业务时区自然日） */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DashboardSummary"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -658,6 +774,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/inconsistencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 异常中心列表：不一致记录按创建时间倒序，可按是否已处理筛选，游标分页（不含 payload） */
+        get: {
+            parameters: {
+                query?: {
+                    resolved?: components["schemas"]["InconsistencyResolvedFilterInput"];
+                    before?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InconsistencyPage"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inconsistencies/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 某条不一致记录的详情（含 payload 原文） */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InconsistencyDetail"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inconsistencies/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 把一条不一致记录标记为已处理（记录处理人；幂等，重复标记返回原记录） */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InconsistencyRead"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{jobId}": {
         parameters: {
             query?: never;
@@ -705,7 +937,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 用给定的 Base URL 与 key 向服务商获取模型列表（按 id 排序） */
+        /** 用给定的服务商与 key 获取可用的模型列表（Claude：Models API；Gemini：支持 generateContent 的模型） */
         post: {
             parameters: {
                 query?: never;
@@ -743,7 +975,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 当前的 LLM 设置（Base URL、模型、key 提示）；Agent 服务不是 llm-agent 时 supported=false */
+        /** 当前的 LLM 设置（服务商 Claude / Gemini、模型、key 提示）；Agent 服务不是 llm-agent 时 supported=false */
         get: {
             parameters: {
                 query?: never;
@@ -764,7 +996,7 @@ export interface paths {
                 };
             };
         };
-        /** 保存 LLM 设置（apiKey 省略时仅在 Base URL 不变时沿用已保存的 key），llm-agent 立即生效 */
+        /** 保存 LLM 设置（apiKey 省略时仅在服务商不变时沿用已保存的 key），llm-agent 立即生效 */
         put: {
             parameters: {
                 query?: never;
@@ -974,6 +1206,36 @@ export interface components {
             status: components["schemas"]["AccountStatusInput"];
             stepsSkippedCount: number;
         };
+        /** @enum {string} */
+        ActivityEventType: "account_status_changed" | "account_terminal" | "inconsistency" | "message" | "agent_run" | "sequence_run" | "job" | "group_status_changed" | "group_settings_changed" | "member_changed";
+        /** @enum {string} */
+        ActivityEventTypeInput: "account_status_changed" | "account_terminal" | "inconsistency" | "message" | "agent_run" | "sequence_run" | "job" | "group_status_changed" | "group_settings_changed" | "member_changed";
+        ActivityItem: {
+            /** Format: date-time */
+            createdAt: string;
+            payload: {
+                [key: string]: unknown;
+            };
+            seq: number;
+            type: components["schemas"]["ActivityEventType"];
+        };
+        ActivityItemInput: {
+            /** Format: date-time */
+            createdAt: string;
+            payload: {
+                [key: string]: unknown;
+            };
+            seq: number;
+            type: components["schemas"]["ActivityEventTypeInput"];
+        };
+        ActivityPage: {
+            items: components["schemas"]["ActivityItem"][];
+            nextCursor: string | null;
+        };
+        ActivityPageInput: {
+            items: components["schemas"]["ActivityItemInput"][];
+            nextCursor: string | null;
+        };
         AgentRunDetail: {
             accumulatedMs: number;
             budgetMs: number;
@@ -1010,6 +1272,30 @@ export interface components {
         AgentRunEndReason: "final" | "budget_exhausted" | "wall_clock" | "protocol_errors" | "audit_blocked" | "cancelled";
         /** @enum {string} */
         AgentRunEndReasonInput: "final" | "budget_exhausted" | "wall_clock" | "protocol_errors" | "audit_blocked" | "cancelled";
+        AgentRunListItem: {
+            /** Format: date-time */
+            createdAt: string;
+            endReason: components["schemas"]["AgentRunEndReason"] | null;
+            finishedAt: string | null;
+            gatewayGroupId: string | null;
+            groupId: string;
+            id: string;
+            status: components["schemas"]["AgentRunStatus"];
+            stepCount: number;
+            summary: string | null;
+        };
+        AgentRunListItemInput: {
+            /** Format: date-time */
+            createdAt: string;
+            endReason: components["schemas"]["AgentRunEndReasonInput"] | null;
+            finishedAt: string | null;
+            gatewayGroupId: string | null;
+            groupId: string;
+            id: string;
+            status: components["schemas"]["AgentRunStatusInput"];
+            stepCount: number;
+            summary: string | null;
+        };
         AgentRunListResponse: {
             items: components["schemas"]["AgentRunRead"][];
             total: number;
@@ -1017,6 +1303,14 @@ export interface components {
         AgentRunListResponseInput: {
             items: components["schemas"]["AgentRunReadInput"][];
             total: number;
+        };
+        AgentRunPage: {
+            items: components["schemas"]["AgentRunListItem"][];
+            nextCursor: string | null;
+        };
+        AgentRunPageInput: {
+            items: components["schemas"]["AgentRunListItemInput"][];
+            nextCursor: string | null;
         };
         AgentRunRead: {
             accumulatedMs: number;
@@ -1114,6 +1408,112 @@ export interface components {
         CreateGroupResponseInput: {
             jobId: string;
         };
+        DashboardAccounts: {
+            disconnected: number;
+            idle: number;
+            online: number;
+            rate_limited: number;
+            session_expired: number;
+            suspended: number;
+            total: number;
+        };
+        DashboardAccountsInput: {
+            disconnected: number;
+            idle: number;
+            online: number;
+            rate_limited: number;
+            session_expired: number;
+            suspended: number;
+            total: number;
+        };
+        DashboardAgentRuns: {
+            blocked: number;
+            running: number;
+            todayFailed: number;
+            todayFinished: number;
+        };
+        DashboardAgentRunsInput: {
+            blocked: number;
+            running: number;
+            todayFailed: number;
+            todayFinished: number;
+        };
+        DashboardGroups: {
+            active: number;
+            agentEnabled: number;
+            left: number;
+            total: number;
+            unreachable: number;
+        };
+        DashboardGroupsInput: {
+            active: number;
+            agentEnabled: number;
+            left: number;
+            total: number;
+            unreachable: number;
+        };
+        DashboardInconsistencies: {
+            unresolved: number;
+        };
+        DashboardInconsistenciesInput: {
+            unresolved: number;
+        };
+        DashboardJobs: {
+            running: number;
+            todayFailed: number;
+        };
+        DashboardJobsInput: {
+            running: number;
+            todayFailed: number;
+        };
+        DashboardMessages: {
+            outboundFailed: number;
+            outboundQueued: number;
+            outboundUnknown: number;
+            todayInbound: number;
+            todayOutbound: number;
+        };
+        DashboardMessagesInput: {
+            outboundFailed: number;
+            outboundQueued: number;
+            outboundUnknown: number;
+            todayInbound: number;
+            todayOutbound: number;
+        };
+        DashboardSequenceRuns: {
+            running: number;
+        };
+        DashboardSequenceRunsInput: {
+            running: number;
+        };
+        DashboardSummary: {
+            accounts: components["schemas"]["DashboardAccounts"];
+            agentRuns: components["schemas"]["DashboardAgentRuns"];
+            /** Format: date-time */
+            dayStart: string;
+            /** Format: date-time */
+            generatedAt: string;
+            groups: components["schemas"]["DashboardGroups"];
+            inconsistencies: components["schemas"]["DashboardInconsistencies"];
+            jobs: components["schemas"]["DashboardJobs"];
+            messages: components["schemas"]["DashboardMessages"];
+            sequenceRuns: components["schemas"]["DashboardSequenceRuns"];
+            timeZone: string;
+        };
+        DashboardSummaryInput: {
+            accounts: components["schemas"]["DashboardAccountsInput"];
+            agentRuns: components["schemas"]["DashboardAgentRunsInput"];
+            /** Format: date-time */
+            dayStart: string;
+            /** Format: date-time */
+            generatedAt: string;
+            groups: components["schemas"]["DashboardGroupsInput"];
+            inconsistencies: components["schemas"]["DashboardInconsistenciesInput"];
+            jobs: components["schemas"]["DashboardJobsInput"];
+            messages: components["schemas"]["DashboardMessagesInput"];
+            sequenceRuns: components["schemas"]["DashboardSequenceRunsInput"];
+            timeZone: string;
+        };
         /** @enum {string} */
         DeliveryStatus: "queued" | "accepted" | "sent" | "failed" | "unknown" | "cancelled";
         /** @enum {string} */
@@ -1166,6 +1566,64 @@ export interface components {
             ok: true;
             schemaVersion: string;
         };
+        InconsistencyDetail: {
+            /** Format: date-time */
+            createdAt: string;
+            id: string;
+            kind: string;
+            message: string;
+            payload: {
+                [key: string]: unknown;
+            } | null;
+            ref: string | null;
+            resolvedAt: string | null;
+            resolvedBy: string | null;
+        };
+        InconsistencyDetailInput: {
+            /** Format: date-time */
+            createdAt: string;
+            id: string;
+            kind: string;
+            message: string;
+            payload: {
+                [key: string]: unknown;
+            } | null;
+            ref: string | null;
+            resolvedAt: string | null;
+            resolvedBy: string | null;
+        };
+        InconsistencyPage: {
+            items: components["schemas"]["InconsistencyRead"][];
+            nextCursor: string | null;
+        };
+        InconsistencyPageInput: {
+            items: components["schemas"]["InconsistencyReadInput"][];
+            nextCursor: string | null;
+        };
+        InconsistencyRead: {
+            /** Format: date-time */
+            createdAt: string;
+            id: string;
+            kind: string;
+            message: string;
+            ref: string | null;
+            resolvedAt: string | null;
+            resolvedBy: string | null;
+        };
+        InconsistencyReadInput: {
+            /** Format: date-time */
+            createdAt: string;
+            id: string;
+            kind: string;
+            message: string;
+            ref: string | null;
+            resolvedAt: string | null;
+            resolvedBy: string | null;
+        };
+        /** @enum {string} */
+        InconsistencyResolvedFilter: "true" | "false";
+        /** @enum {string} */
+        InconsistencyResolvedFilterInput: "true" | "false";
         JobErrorRead: {
             accountId: string | null;
             code: string;
@@ -1233,37 +1691,33 @@ export interface components {
             total: number;
         };
         LlmModelRead: {
+            displayName: string;
             id: string;
-            ownedBy: string | null;
         };
         LlmModelReadInput: {
+            displayName: string;
             id: string;
-            ownedBy: string | null;
         };
         LlmModelsRequest: {
-            /** @description 省略时沿用已保存的 key —— 仅当 baseUrl 与已保存的相同 */
+            /** @description 省略时沿用已保存的 key —— 仅当 provider 与已保存的相同 */
             apiKey?: string;
-            /**
-             * Format: uri
-             * @description OpenAI Chat Completions 兼容端点的 base url，不含 /chat/completions
-             */
-            baseUrl: string;
+            provider: components["schemas"]["LlmProvider"];
         };
         LlmModelsRequestInput: {
-            /** @description 省略时沿用已保存的 key —— 仅当 baseUrl 与已保存的相同 */
+            /** @description 省略时沿用已保存的 key —— 仅当 provider 与已保存的相同 */
             apiKey?: string;
-            /**
-             * Format: uri
-             * @description OpenAI Chat Completions 兼容端点的 base url，不含 /chat/completions
-             */
-            baseUrl: string;
+            provider: components["schemas"]["LlmProviderInput"];
         };
+        /** @enum {string} */
+        LlmProvider: "anthropic" | "gemini";
+        /** @enum {string} */
+        LlmProviderInput: "anthropic" | "gemini";
         LlmSettingsRead: {
             apiKeyHint: string | null;
             auditModel: string | null;
-            baseUrl: string | null;
             hasApiKey: boolean;
             model: string | null;
+            provider: components["schemas"]["LlmProvider"] | null;
             source: components["schemas"]["LlmConfigSource"] | null;
             supported: boolean;
             updatedAt: string | null;
@@ -1271,34 +1725,26 @@ export interface components {
         LlmSettingsReadInput: {
             apiKeyHint: string | null;
             auditModel: string | null;
-            baseUrl: string | null;
             hasApiKey: boolean;
             model: string | null;
+            provider: components["schemas"]["LlmProviderInput"] | null;
             source: components["schemas"]["LlmConfigSourceInput"] | null;
             supported: boolean;
             updatedAt: string | null;
         };
         LlmSettingsUpdate: {
-            /** @description 省略时沿用已保存的 key —— 仅当 baseUrl 与已保存的相同 */
+            /** @description 省略时沿用已保存的 key —— 仅当 provider 与已保存的相同 */
             apiKey?: string;
             auditModel?: string | null;
-            /**
-             * Format: uri
-             * @description OpenAI Chat Completions 兼容端点的 base url，不含 /chat/completions
-             */
-            baseUrl: string;
             model: string;
+            provider: components["schemas"]["LlmProvider"];
         };
         LlmSettingsUpdateInput: {
-            /** @description 省略时沿用已保存的 key —— 仅当 baseUrl 与已保存的相同 */
+            /** @description 省略时沿用已保存的 key —— 仅当 provider 与已保存的相同 */
             apiKey?: string;
             auditModel?: string | null;
-            /**
-             * Format: uri
-             * @description OpenAI Chat Completions 兼容端点的 base url，不含 /chat/completions
-             */
-            baseUrl: string;
             model: string;
+            provider: components["schemas"]["LlmProviderInput"];
         };
         LlmTestResult: {
             latencyMs: number;

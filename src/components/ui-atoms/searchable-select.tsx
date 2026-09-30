@@ -1,17 +1,24 @@
-// 可搜索下拉（Base UI Combobox，字符串选项）：输入框里打字筛选，选中一项即为值；可选「清空」。
+// 可搜索下拉（Base UI Combobox）：输入框里打字筛选，选中一项即为值；可选「清空」。
+// 选项是 { value, label }：显示 label，值是 value（Combobox.createItems），按 label 或 value 都能搜到。
 // 选项较多（模型列表动辄几十个）时比原生 <select> 好用；值只能是列表里的一项，不接受自由输入。
 // 受控：value 为空串表示未选；清空也回调空串。
 
 import { Combobox } from "@base-ui/react/combobox";
 import { Check, ChevronDown, X } from "lucide-react";
+import { useMemo } from "react";
 
 import { cn } from "@/lib/utils";
+
+export interface SearchableSelectOption {
+  value: string;
+  label: string;
+}
 
 export interface SearchableSelectProps {
   id?: string;
   value: string;
   onValueChange: (value: string) => void;
-  options: readonly string[];
+  options: readonly SearchableSelectOption[];
   placeholder?: string;
   /** 筛选后没有匹配项时的文案。 */
   emptyText?: string;
@@ -34,9 +41,22 @@ export function SearchableSelect({
   invalid = false,
   className,
 }: SearchableSelectProps) {
+  const { contains } = Combobox.useFilter();
+  const items = useMemo(
+    () =>
+      Combobox.createItems([...options], {
+        getValue: (option) => option.value,
+        getLabel: (option) => option.label,
+      }),
+    [options],
+  );
+
   return (
-    <Combobox.Root<string>
-      items={options}
+    <Combobox.Root
+      items={items}
+      filter={(option: SearchableSelectOption, query: string) =>
+        contains(option.label, query) || contains(option.value, query)
+      }
       value={value || null}
       // Combobox 在弹层关着时按 Esc、或把输入框删空，会把选中值清成 null；不可清空的字段不接受这种清空，
       // 否则一个手滑的 Esc 就把必选项清掉了（浏览器里实测踩到）。
@@ -91,16 +111,16 @@ export function SearchableSelect({
               </div>
             </Combobox.Empty>
             <Combobox.List className="max-h-[min(20rem,var(--available-height))] overflow-y-auto overscroll-contain py-1 outline-0 data-empty:p-0">
-              {(item: string) => (
+              {(option: SearchableSelectOption) => (
                 <Combobox.Item
-                  key={item}
-                  value={item}
+                  key={option.value}
+                  value={option.value}
                   className="grid cursor-default grid-cols-[1rem_1fr] items-center gap-2 px-3 py-1.5 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                 >
                   <Combobox.ItemIndicator className="col-start-1">
                     <Check className="size-4" />
                   </Combobox.ItemIndicator>
-                  <span className="col-start-2 truncate">{item}</span>
+                  <span className="col-start-2 truncate">{option.label}</span>
                 </Combobox.Item>
               )}
             </Combobox.List>

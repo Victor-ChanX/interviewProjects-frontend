@@ -1,6 +1,6 @@
-// LLM 设置表单：纯展示。选预设 → Base URL（可改）→ API Key（password，不回显明文）→ 获取模型列表
-// → 对话 / 审核模型两个可搜索下拉 → 保存。RHF 的 register / errors / 回调由 hook 给；校验权威只有 zod，
-// 所以 <form noValidate>。
+// LLM 设置表单：纯展示。选服务商（Claude / Gemini）→ API Key（password，不回显明文）→ 获取模型列表
+// → 对话 / 审核模型两个可搜索下拉（显示 displayName，值是 id）→ 保存。RHF 的 register / errors / 回调由 hook 给；
+// 校验权威只有 zod，所以 <form noValidate>。
 
 import { Loader2, RefreshCw } from "lucide-react";
 
@@ -19,15 +19,11 @@ function FieldError({ message }: { message: string | undefined }) {
   return message ? <p className="text-xs text-destructive">{message}</p> : null;
 }
 
-function FieldHint({ children }: { children: string }) {
-  return <p className="text-xs text-muted-foreground">{children}</p>;
-}
-
 export function LlmSettingsFormView({
   register,
   errors,
   providers,
-  providerId,
+  provider,
   onProviderChange,
   apiKeyPlaceholder,
   model,
@@ -37,7 +33,6 @@ export function LlmSettingsFormView({
   modelOptions,
   modelsFetched,
   modelsCount,
-  modelsStale,
   modelsLoading,
   modelsError,
   onFetchModels,
@@ -56,29 +51,20 @@ export function LlmSettingsFormView({
           <select
             id="llm-provider"
             className={SELECT_CLASS}
-            value={providerId}
+            value={provider}
+            aria-invalid={errors.provider ? true : undefined}
             onChange={(event) => onProviderChange(event.target.value)}
           >
-            {providers.map((provider) => (
-              <option key={provider.id} value={provider.id}>
-                {provider.label}
+            <option value="" disabled>
+              请选择服务商
+            </option>
+            {providers.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
               </option>
             ))}
           </select>
-          <FieldHint>选中后填入官方文档里的 Base URL，仍可修改</FieldHint>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="llm-base-url">Base URL</Label>
-          <Input
-            id="llm-base-url"
-            placeholder="例如：https://api.example.com/v1"
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={errors.baseUrl ? true : undefined}
-            {...register("baseUrl")}
-          />
-          <FieldError message={errors.baseUrl?.message} />
+          <FieldError message={errors.provider?.message} />
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -117,11 +103,6 @@ export function LlmSettingsFormView({
                 : "先获取模型列表，再选择模型"}
             </span>
           </div>
-          {modelsStale ? (
-            <p className="text-xs text-muted-foreground">
-              Base URL 已修改，这份列表来自之前的地址，请重新获取
-            </p>
-          ) : null}
           {modelsError ? (
             <Alert variant="destructive">
               <AlertDescription>{modelsError}</AlertDescription>
