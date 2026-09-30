@@ -151,10 +151,17 @@ export function GroupDetailView({
           </div>
           <div className="flex gap-2">
             <dt className="text-muted-foreground">进行中的序列</dt>
-            <dd className="font-mono text-xs">
+            <dd className="flex flex-wrap items-center gap-2 font-mono text-xs">
               {group.activeSequenceRunId ?? (
                 <span className="font-sans text-muted-foreground">无</span>
               )}
+              {/* 前端 #6：序列运行页（预检弹窗 / 启动 / 进度）。 */}
+              <Link
+                to={`/groups/${encodeURIComponent(group.id)}/sequences`}
+                className="font-sans underline-offset-4 hover:underline"
+              >
+                {group.activeSequenceRunId ? "查看进度 →" : "序列运行 →"}
+              </Link>
             </dd>
           </div>
         </dl>

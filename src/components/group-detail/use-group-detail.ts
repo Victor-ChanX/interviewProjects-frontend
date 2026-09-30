@@ -1,6 +1,7 @@
 // 群详情这一条业务流：GET /api/groups/:id → 缓存；开关走 PATCH（mutateAsync 由容器包 try/catch + toast）；
 // 本群的实时事件回写缓存：group_settings_changed 就地改开关，member_changed / group_status_changed /
-// agent_run（activeAgentRunId 变了）按 key invalidate。事件只带 id 与变化，不是整行实体，所以除开关外都重拉。
+// agent_run（activeAgentRunId 变了）/ sequence_run（activeSequenceRunId 变了）按 key invalidate。
+// 事件只带 id 与变化，不是整行实体，所以除开关外都重拉。
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
@@ -19,6 +20,7 @@ import {
   patchGroup,
   type PatchGroupPayload,
 } from "@/services/group-service";
+import type { SequenceRunEventPayload } from "@/services/sequence-service";
 
 import type { GroupSetting } from "./types";
 
@@ -95,6 +97,16 @@ export function useGroupDetail(groupId: string) {
 
   useRealtimeEvent<AgentRunEventPayload>(
     "agent_run",
+    useCallback(
+      (payload) => {
+        if (payload.groupId === groupId) invalidateDetail();
+      },
+      [groupId, invalidateDetail],
+    ),
+  );
+
+  useRealtimeEvent<SequenceRunEventPayload>(
+    "sequence_run",
     useCallback(
       (payload) => {
         if (payload.groupId === groupId) invalidateDetail();

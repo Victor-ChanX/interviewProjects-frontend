@@ -26,4 +26,14 @@ export const queryKeys = {
     byGroup: (groupId: string) => ["agent-runs", "group", groupId] as const,
     detail: (id: string) => ["agent-runs", "detail", id] as const,
   },
+  // 序列定义（题目 B1；前端 #6）：GET /api/sequences 是 { items, total }、无参数。
+  sequences: {
+    all: ["sequences"] as const,
+    list: () => ["sequences", "list"] as const,
+  },
+  // 序列运行：单条详情按 id（WS `sequence_run` 事件按 runId invalidate）。
+  sequenceRuns: {
+    all: ["sequence-runs"] as const,
+    detail: (id: string) => ["sequence-runs", "detail", id] as const,
+  },
 } as const;
