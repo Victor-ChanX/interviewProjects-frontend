@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn() }));
+const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), post: vi.fn() }));
 
 vi.mock("@/lib/api", () => ({ api }));
 
 import {
+  createGroup,
   getGroup,
   groupUrl,
+  leaveAllGroup,
   listGroups,
   patchGroup,
 } from "@/services/group-service";
@@ -50,5 +52,38 @@ describe("patchGroup", () => {
     expect(api.patch).toHaveBeenCalledWith("/api/groups/g1", {
       agentEnabled: false,
     });
+  });
+});
+
+describe("createGroup", () => {
+  it("POSTs the creator and ordered members to /api/groups and returns the job id", async () => {
+    api.post.mockResolvedValue({ jobId: "j1" });
+
+    await expect(
+      createGroup({ creatorAccountId: "a0", memberAccountIds: ["a2", "a1"] }),
+    ).resolves.toEqual({ jobId: "j1" });
+    expect(api.post).toHaveBeenCalledWith("/api/groups", {
+      creatorAccountId: "a0",
+      memberAccountIds: ["a2", "a1"],
+    });
+  });
+
+  it("propagates the request error (422 ACCOUNT_NOT_ONLINE etc.)", async () => {
+    const failure = new Error("账号不在线");
+
+    api.post.mockRejectedValue(failure);
+
+    await expect(
+      createGroup({ creatorAccountId: "a0", memberAccountIds: ["a1"] }),
+    ).rejects.toBe(failure);
+  });
+});
+
+describe("leaveAllGroup", () => {
+  it("POSTs to /api/groups/:id/leave-all without a body, encoding the id", async () => {
+    api.post.mockResolvedValue({ jobId: "j2" });
+
+    await expect(leaveAllGroup("g/1")).resolves.toEqual({ jobId: "j2" });
+    expect(api.post).toHaveBeenCalledWith("/api/groups/g%2F1/leave-all");
   });
 });

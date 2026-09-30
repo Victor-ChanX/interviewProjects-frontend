@@ -1,6 +1,7 @@
 // container：hook 编排 + 权限分支 + 开关的 toast；渲染就绪的数据与回调通过 props 交给 view。
 // 实时订阅都在各自的 hook 里（use-group-detail / use-message-timeline / use-agent-runs）；
 // 账号状态事件复用 src/hooks/use-account-events.ts，让发消息表单的「在线账号」跟着变。
+// 全部退群（前端 #10）只给 admin：确认 / 提交 / 进度在 use-leave-all。
 
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
@@ -12,9 +13,14 @@ import { getErrorMessage } from "@/lib/get-error-message";
 import type { GroupMemberRead, GroupStatus } from "@/services/group-service";
 
 import { GroupDetailView } from "./group-detail-view";
-import type { GroupSetting, SendMessageFormViewProps } from "./types";
+import type {
+  GroupSetting,
+  LeaveAllDialogViewProps,
+  SendMessageFormViewProps,
+} from "./types";
 import { useAgentRuns } from "./use-agent-runs";
 import { useGroupDetail } from "./use-group-detail";
+import { useLeaveAll } from "./use-leave-all";
 import { useMessageTimeline } from "./use-message-timeline";
 import { useSendMessage } from "./use-send-message";
 
@@ -39,6 +45,7 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
   const agentRuns = useAgentRuns(groupId);
   const members = detail.group?.members ?? NO_MEMBERS;
   const send = useSendMessage({ groupId, members, enabled: canWrite });
+  const leave = useLeaveAll(groupId);
   const { toggleSetting, refetch: refetchDetail } = detail;
   const { refetch: refetchTimeline } = timeline;
   const { refetch: refetchAgentRuns } = agentRuns;
@@ -87,6 +94,29 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
     [canWrite, detail.group, send],
   );
 
+  const leaveAll = useMemo<LeaveAllDialogViewProps | null>(
+    () =>
+      canWrite
+        ? {
+            open: leave.open,
+            onOpenChange: leave.setOpen,
+            groupId,
+            submitting: leave.submitting,
+            submitError: leave.submitError,
+            onConfirm: () => void leave.confirm(),
+            progress:
+              leave.jobId === null
+                ? null
+                : {
+                    job: leave.job,
+                    errorMessage: leave.jobError,
+                    running: leave.jobRunning,
+                  },
+          }
+        : null,
+    [canWrite, groupId, leave],
+  );
+
   return (
     <GroupDetailView
       group={detail.group}
@@ -118,6 +148,8 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
         activeRunId: detail.group?.activeAgentRunId ?? null,
         onRetry: onAgentRunsRetry,
       }}
+      leaveAll={leaveAll}
+      onLeaveAll={leave.openDialog}
     />
   );
 }

@@ -1,6 +1,6 @@
 // view：纯展示，props 进回调出。原生 <table>：共享 DataTable（ui-atoms）尚未落地，四列只读表不值得先造它。
 
-import { RefreshCw } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { getErrorMessage } from "@/lib/get-error-message";
 import { cn } from "@/lib/utils";
 import type { GroupStatus } from "@/services/group-service";
 
+import { CreateGroupDialogView } from "./create-group-dialog-view";
 import type { GroupListViewProps } from "./types";
 
 const STATUS_LABELS: Readonly<Record<GroupStatus, string>> = {
@@ -33,21 +34,33 @@ export function GroupListView({
   retrying,
   onRetry,
   onOpen,
+  createDialog,
+  onCreate,
 }: GroupListViewProps) {
   return (
     <section className="flex flex-col gap-4">
       <header className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">群列表</h1>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onRetry}
-          disabled={retrying}
-        >
-          <RefreshCw className={cn("size-4", { "animate-spin": retrying })} />
-          刷新
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRetry}
+            disabled={retrying}
+          >
+            <RefreshCw className={cn("size-4", { "animate-spin": retrying })} />
+            刷新
+          </Button>
+          {createDialog ? (
+            <Button size="sm" onClick={onCreate}>
+              <Plus className="size-4" />
+              新建群
+            </Button>
+          ) : null}
+        </div>
       </header>
+
+      {createDialog ? <CreateGroupDialogView {...createDialog} /> : null}
 
       {error ? (
         <QueryError

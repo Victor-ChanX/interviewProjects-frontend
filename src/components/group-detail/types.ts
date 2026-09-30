@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import type { FieldErrors, UseFormRegister } from "react-hook-form";
 
+import type { JobProgressProps } from "@/components/ui-atoms/job-progress";
 import type { ConnectionStatus } from "@/lib/ws";
 import type { AgentRunRead } from "@/services/agent-run-service";
 import type { GroupMemberRead, GroupRead } from "@/services/group-service";
@@ -55,6 +56,18 @@ export interface AgentRunListViewProps {
   onRetry: () => void;
 }
 
+export interface LeaveAllDialogViewProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  groupId: string;
+  submitting: boolean;
+  /** 提交被拒的整句提示（409 GROUP_ALREADY_LEFT / GROUP_NOT_READY / JOB_ALREADY_RUNNING 的 message）；null 不显示。 */
+  submitError: string | null;
+  onConfirm: () => void;
+  /** 已拿到 jobId 时切到进度；null 表示还在确认。 */
+  progress: (JobProgressProps & { running: boolean }) | null;
+}
+
 export interface GroupDetailViewProps {
   group: GroupRead | undefined;
   loading: boolean;
@@ -72,4 +85,7 @@ export interface GroupDetailViewProps {
   /** canWrite 为 false 时为 null，不渲染表单。 */
   sendForm: SendMessageFormViewProps | null;
   agentRuns: AgentRunListViewProps;
+  /** admin 才有「全部退群」；viewer 为 null。按钮只在群 active / unreachable 时显示，弹窗一直挂着（进度要看完）。 */
+  leaveAll: LeaveAllDialogViewProps | null;
+  onLeaveAll: () => void;
 }

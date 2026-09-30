@@ -36,6 +36,11 @@ export const queryKeys = {
     all: ["sequence-runs"] as const,
     detail: (id: string) => ["sequence-runs", "detail", id] as const,
   },
+  // 异步任务（建群 / 全部退群；前端 #10）：GET /api/jobs/:jobId，running 期间轮询 + WS `job` 事件按 id invalidate。
+  jobs: {
+    all: ["jobs"] as const,
+    detail: (id: string) => ["jobs", "detail", id] as const,
+  },
   // LLM 设置（后端 #19；前端 #9）：GET /api/llm/settings 无参数，响应不含 key 明文。
   // 获取模型列表 / 保存带 key，不走 query / mutation 缓存，所以这里没有它们的 key。
   llmSettings: {

@@ -1,9 +1,11 @@
 // 群详情的布局：纯展示，props 进回调出。头部（状态 / 开关 / 进行中的 run）+ 成员表 + 时间线（含发消息表单）
 // + agent run 列表。不 fetch、不 toast、不做路由、不知道有实时连接（connection 只是一个要显示的状态）。
 
+import { LogOut } from "lucide-react";
 import { Link } from "react-router";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -18,6 +20,7 @@ import { cn } from "@/lib/utils";
 import type { GroupStatus } from "@/services/group-service";
 
 import { AgentRunListView } from "./agent-run-list-view";
+import { LeaveAllDialogView } from "./leave-all-dialog-view";
 import { MemberTableView } from "./member-table-view";
 import { MessageTimelineView } from "./message-timeline-view";
 import { SendMessageFormView } from "./send-message-form-view";
@@ -34,6 +37,13 @@ const STATUS_CLASS: Readonly<Record<GroupStatus, string>> = {
   active: "border-success/40 bg-success/15 text-success",
   unreachable: "border-destructive/40 bg-destructive/15 text-destructive",
   left: "border-border bg-muted text-muted-foreground",
+};
+
+/** 全部退群只对还在群里的状态开放（left 后端回 409 GROUP_ALREADY_LEFT）。 */
+const CAN_LEAVE_ALL: Readonly<Record<GroupStatus, boolean>> = {
+  active: true,
+  unreachable: true,
+  left: false,
 };
 
 const SETTING_LABELS: Readonly<Record<GroupSetting, string>> = {
@@ -87,6 +97,8 @@ export function GroupDetailView({
   timeline,
   sendForm,
   agentRuns,
+  leaveAll,
+  onLeaveAll,
 }: GroupDetailViewProps) {
   if (error)
     return (
@@ -131,6 +143,17 @@ export function GroupDetailView({
           >
             {connection === "open" ? "实时" : "离线"}
           </span>
+          {leaveAll && CAN_LEAVE_ALL[group.status] ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto text-destructive"
+              onClick={onLeaveAll}
+            >
+              <LogOut className="size-4" />
+              全部退群
+            </Button>
+          ) : null}
         </div>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
           <div className="flex gap-2">
@@ -188,6 +211,8 @@ export function GroupDetailView({
           </p>
         )}
       </header>
+
+      {leaveAll ? <LeaveAllDialogView {...leaveAll} /> : null}
 
       <Card>
         <CardHeader>
