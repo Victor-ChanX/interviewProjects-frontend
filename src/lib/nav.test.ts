@@ -86,4 +86,10 @@ describe("documentTitle", () => {
     expect(documentTitle("/groups/g1")).toBe("群详情 · 群组消息平台");
     expect(documentTitle("/accounts")).toBe("账号管理 · 群组消息平台");
   });
+
+  it("names the login page and keeps the root redirect neutral", () => {
+    expect(documentTitle("/login")).toBe("登录 · 群组消息平台");
+    expect(documentTitle("/")).toBe("群组消息平台");
+    expect(documentTitle("/nope")).toBe("页面不存在 · 群组消息平台");
+  });
 });

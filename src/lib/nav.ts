@@ -2,6 +2,8 @@
 // 面包屑按路由生成（「运营 / 群组管理 / 群详情」）。页面名称与后端仓 docs/manual-testing.md 一致。
 // 图标由视图按 key 取（lib 不碰组件）；路由本身登记在 src/app/router.tsx，这里只描述「怎么叫、放哪组」。
 
+import { LOGIN_PATH } from "./login-redirect";
+
 export type NavKey =
   | "dashboard"
   | "accounts"
@@ -115,8 +117,11 @@ export function buildBreadcrumbs(pathname: string): Crumb[] {
 
 export const PRODUCT_NAME = "群组消息平台";
 
-/** 浏览器标签页标题：当前页名 · 产品名。 */
+/** 浏览器标签页标题：当前页名 · 产品名。登录页单独叫「登录」；根路径只是跳转中转，只写产品名。 */
 export function documentTitle(pathname: string): string {
+  if (pathname === LOGIN_PATH) return `登录 · ${PRODUCT_NAME}`;
+  if (pathname === "/") return PRODUCT_NAME;
+
   const crumbs = buildBreadcrumbs(pathname);
   const current = crumbs[crumbs.length - 1]?.label;
 

@@ -3,12 +3,14 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router";
 
 import { setAccessToken } from "@/lib/auth";
 import { getErrorMessage } from "@/lib/get-error-message";
+import { LOGIN_PATH } from "@/lib/login-redirect";
+import { documentTitle } from "@/lib/nav";
 import { login } from "@/services/auth-service";
 
 import { type LoginFormValues, loginSchema } from "./login-schema";
@@ -27,6 +29,11 @@ export function useLogin(next: string) {
     mutationFn: (values: LoginFormValues) => login(values),
   });
   const { mutate } = mutation;
+
+  // 登录页在控制台布局之外，标签页标题自己设（否则会留着上一页 / 跳转前的标题）。
+  useEffect(() => {
+    document.title = documentTitle(LOGIN_PATH);
+  }, []);
 
   const onValid = useCallback(
     (values: LoginFormValues) => {
