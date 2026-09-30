@@ -10,9 +10,13 @@
 // credentials，不带 Bearer；前端 NEVER 读它、存它）→ 成功则 setAccessToken 并把原请求**重放一次**；
 // 重放仍 401 就当会话失效，不再刷（两个过期 token 会互相触发无限刷新）。
 // 单飞：模块级 `refreshing` 存着进行中的刷新 Promise，并发的 401 只 await 同一个，refresh 只发一次；
+// 刷新完成后才回来的 401（带旧 token 发出、响应慢）不再刷：比对发出时的 token 与当前 token，
+// 已经换过就直接用新 token 重放（前端 #13），当前已无 token（上一次刷新失败清了会话）就照常抛 401。
 // 刷新失败（refresh 也 401 / 网络错 / 响应里没有可解的 token）→ clearSession() + onAuthError()
 // （受保护布局的容器注入「跳登录页带 next」，src/components/app-shell/use-app-shell.ts），
 // 也只在那一次刷新里做一次。src/lib/ws.ts 收到 4401 时复用同一个 refreshAccessToken()。
+// 自动重试（fetch 自身 reject：断线、超时）默认只给幂等方法（GET / PUT / DELETE）一次；POST / PATCH
+// 默认不重试 —— 超时时服务端可能已经处理，静默再发一次就是群里两条相同消息（前端 #13）。
 // 刷新页面时 access token 已过期 / 没有、但 refresh cookie 可能还有效：use-app-shell 在跳登录之前
 // 先 refreshAccessToken({ silent: true }) 试一次 —— silent 只是不触发 onAuthError（守卫自己会
 // 渲染 <Navigate> 去登录页，再触发一次就是双跳），会话照样清。
@@ -64,7 +68,10 @@ export interface RequestOptions {
   auth?: boolean;
   responseType?: ResponseType;
   timeout?: number;
-  /** 只覆盖网络错误（fetch 自身 reject）；HTTP 错误不重试。 */
+  /**
+   * 只覆盖网络错误（fetch 自身 reject，含超时）；HTTP 错误不重试。
+   * 默认：幂等方法（GET / PUT / DELETE）1 次，POST / PATCH 0 次。
+   */
   retries?: number;
   signal?: AbortSignal;
 }
@@ -78,6 +85,10 @@ const config: RequestConfig = {
   // 清会话 —— 守卫（app-shell-container）订阅着会话，读到 null 会自己渲染 <Navigate> 去登录页。
   onAuthError: () => {},
 };
+
+/** 没显式传 retries 时自动重试一次的方法：重发不会改变结果的那几个。 */
+const IDEMPOTENT_METHODS: ReadonlySet<NonNullable<RequestOptions["method"]>> =
+  new Set(["GET", "PUT", "DELETE"]);
 
 export function configureRequest(next: Partial<RequestConfig>): void {
   Object.assign(config, next);
@@ -292,7 +303,7 @@ export async function request<T>(
     auth = true,
     responseType = "auto",
     timeout = 15_000,
-    retries = 1,
+    retries = IDEMPOTENT_METHODS.has(method) ? 1 : 0,
     signal,
   } = options;
 
@@ -300,12 +311,17 @@ export async function request<T>(
   const isFormData =
     typeof FormData !== "undefined" && body instanceof FormData;
 
+  /** 最近一次发出时带的 access token：401 回来时拿它判断会话是否已经被别的请求续过期。 */
+  let sentToken: string | null = null;
+
   const buildInit = (): RequestInit => {
     const h: Record<string, string> = {
       Accept: "application/json",
       ...headers,
     };
     const token = auth ? getAccessToken() : null;
+
+    sentToken = token;
 
     if (token) h.Authorization = `Bearer ${token}`;
 
@@ -336,9 +352,15 @@ export async function request<T>(
   // responseInterceptor 留在重试循环之外：HTTP 错误不重发，401 只走一次刷新。
   // 登录接口自己传 auth: false：账号密码错的 401 不算会话失效，也不去刷新。
   if (response.status === 401 && auth) {
-    // 单飞刷新：并发的 401 共用同一个 Promise。成功后用新 token 重放一次（buildInit 重新取 token）；
-    // 失败时刷新函数已清会话并通知 onAuthError，这里只把 401 照常抛出去。
-    if (await refreshAccessToken()) {
+    const current = getAccessToken();
+    // 发出之后 token 已经换过：别的请求的刷新已经完成（成功 → 有新 token，直接重放；
+    // 失败 → 会话已清、onAuthError 已通知，照常抛 401）。都不必再刷一轮。
+    // 没换过才刷新 —— 单飞，并发的 401 共用同一个 Promise；成功后用新 token 重放一次
+    // （buildInit 重新取 token），失败时刷新函数已清会话并通知 onAuthError，这里只把 401 照常抛出去。
+    const renewed =
+      current !== sentToken ? current !== null : await refreshAccessToken();
+
+    if (renewed) {
       response = await fetchWithRetry(
         url,
         buildInit(),

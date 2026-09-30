@@ -70,6 +70,7 @@ function stubAuthFetch(refresh: () => Response, replayStatus = 200) {
   vi.stubGlobal("fetch", fetchMock);
 
   return {
+    fetchMock,
     calls,
     refreshCalls: () => calls.filter((c) => c.url === REFRESH_URL),
     replayCalls: () =>
@@ -157,6 +158,72 @@ describe("retries", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  // 前端 #13：发送 / 建群 / 启动序列都是 POST，超时或断线时服务端可能已经处理，静默再发一次就是两条
+  it.each(["POST", "PATCH"] as const)(
+    "does not auto-retry a non-idempotent %s on a network error",
+    async (method) => {
+      const fetchMock = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+
+      vi.stubGlobal("fetch", fetchMock);
+
+      await expect(
+        request("/api/groups/g1/send", { method, body: { text: "hi" } }),
+      ).rejects.toThrow("Failed to fetch");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("does not auto-retry a POST that timed out", async () => {
+    vi.useFakeTimers();
+
+    try {
+      // 挂住直到被 abort：模拟服务端已收到、响应迟迟不回
+      const fetchMock = vi.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+          }),
+      );
+
+      vi.stubGlobal("fetch", fetchMock);
+
+      const pending = request("/api/groups/g1/send", {
+        method: "POST",
+        body: { text: "hi" },
+      }).catch((e: unknown) => e);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(await pending).toMatchObject({ name: "AbortError" });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["GET", "PUT", "DELETE"] as const)(
+    "retries an idempotent %s once on a network error by default",
+    async (method) => {
+      const fetchMock = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+
+      vi.stubGlobal("fetch", fetchMock);
+
+      await expect(request("/api/x", { method })).resolves.toEqual({
+        ok: true,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    },
+  );
 });
 
 describe("401 refresh (single flight)", () => {
@@ -280,6 +347,94 @@ describe("401 refresh (single flight)", () => {
     expect(fetches.calls).toHaveLength(3);
     expect(onAuthError).toHaveBeenCalledTimes(1);
     expect(getAccessToken()).toBeNull();
+  });
+
+  // 前端 #13：单飞只合并「同时」到达的 401；刷新完成后才回来的旧 token 401 不该再刷一轮
+  it("replays a 401 that arrives after the refresh finished with the new token, without refreshing again", async () => {
+    setAccessToken(OLD_TOKEN);
+
+    const onAuthError = vi.fn();
+
+    configureRequest({ onAuthError });
+
+    const fetches = stubAuthFetch(() =>
+      jsonResponse(200, { accessToken: NEW_TOKEN }),
+    );
+    const fastFetch = fetches.fetchMock.getMockImplementation()!;
+    let releaseSlow: (response: Response) => void = () => {};
+
+    // /api/slow 带旧 token 发出后挂住，等 A 的刷新走完再回 401
+    fetches.fetchMock.mockImplementation((url: string, init: RequestInit) => {
+      if (url === "/api/slow" && authHeader(init) === `Bearer ${OLD_TOKEN}`) {
+        fetches.calls.push({ url, init });
+
+        return new Promise<Response>((resolve) => {
+          releaseSlow = resolve;
+        });
+      }
+
+      return fastFetch(url, init);
+    });
+
+    const slow = request("/api/slow", { method: "POST", body: { a: 1 } });
+
+    await expect(request("/api/groups")).resolves.toEqual({ ok: true });
+    expect(fetches.refreshCalls()).toHaveLength(1);
+    expect(getAccessToken()).toBe(NEW_TOKEN);
+
+    releaseSlow(
+      jsonResponse(401, { error: { code: "UNAUTHORIZED", message: "未登录" } }),
+    );
+
+    await expect(slow).resolves.toEqual({ ok: true });
+    // 没有第二次 refresh；B 直接用新 token 重放一次，方法与请求体不变
+    expect(fetches.refreshCalls()).toHaveLength(1);
+    expect(
+      fetches.replayCalls().filter((c) => c.url === "/api/slow"),
+    ).toHaveLength(1);
+    expect(
+      fetches.replayCalls().find((c) => c.url === "/api/slow")?.init,
+    ).toMatchObject({ method: "POST", body: JSON.stringify({ a: 1 }) });
+    expect(onAuthError).not.toHaveBeenCalled();
+  });
+
+  it("does not refresh again for a late 401 after the refresh already failed", async () => {
+    setAccessToken(OLD_TOKEN);
+
+    const onAuthError = vi.fn();
+
+    configureRequest({ onAuthError });
+
+    const fetches = stubAuthFetch(() =>
+      jsonResponse(401, { detail: "refresh token 无效" }),
+    );
+    const fastFetch = fetches.fetchMock.getMockImplementation()!;
+    let releaseSlow: (response: Response) => void = () => {};
+
+    fetches.fetchMock.mockImplementation((url: string, init: RequestInit) => {
+      if (url === "/api/slow") {
+        fetches.calls.push({ url, init });
+
+        return new Promise<Response>((resolve) => {
+          releaseSlow = resolve;
+        });
+      }
+
+      return fastFetch(url, init);
+    });
+
+    const slow = request("/api/slow");
+
+    await expect(request("/api/groups")).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(getAccessToken()).toBeNull();
+
+    releaseSlow(jsonResponse(401, { detail: "unauthorized" }));
+
+    await expect(slow).rejects.toMatchObject({ status: 401 });
+    expect(fetches.refreshCalls()).toHaveLength(1);
+    expect(onAuthError).toHaveBeenCalledTimes(1);
   });
 
   it("does not refresh for a 401 on an auth: false request (login)", async () => {

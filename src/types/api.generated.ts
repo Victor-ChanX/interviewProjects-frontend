@@ -293,7 +293,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 登出：整个会话族作废，同一 access token 立即失效，清 refresh cookie */
+        /** 登出：整个会话族作废，同一 access token 立即失效，清 refresh cookie（access token 过期时凭 cookie） */
         post: {
             parameters: {
                 query?: never;
