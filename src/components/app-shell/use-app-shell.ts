@@ -10,6 +10,8 @@ import { useSession } from "@/hooks/use-session";
 import { clearSession } from "@/lib/auth";
 import { buildLoginRedirect, LOGIN_PATH } from "@/lib/login-redirect";
 import { configureRequest } from "@/lib/request";
+import { disconnectRealtime } from "@/lib/ws";
+import { logout } from "@/services/auth-service";
 
 export function useAppShell() {
   const session = useSession();
@@ -44,11 +46,20 @@ export function useAppShell() {
   // 登录态就绪才建连；退出 / 401 清会话后断开（#4 的 useRealtimeConnection 自己读 useSession）。
   useRealtimeConnection();
 
+  // 退出：先让后端作废整个会话族并清 refresh cookie（凭 Bearer 找会话，所以在清本地之前调；
+  // 后端不可达 / 已失效也照样往下走，不能把人困在页面里），再断实时连接、清本地会话与缓存。
   const onLogout = useCallback(() => {
-    clearSession();
-    // 缓存里是按角色可见的数据，不能留给下一位登录者。
-    queryClient.clear();
-    void navigate(LOGIN_PATH, { replace: true });
+    void logout()
+      .catch(() => {
+        // 登出请求失败（断网、token 已失效）：本地照样清；服务端那份会话到期自然失效。
+      })
+      .finally(() => {
+        disconnectRealtime();
+        clearSession();
+        // 缓存里是按角色可见的数据，不能留给下一位登录者。
+        queryClient.clear();
+        void navigate(LOGIN_PATH, { replace: true });
+      });
   }, [navigate, queryClient]);
 
   return { session, connection, loginRedirect, onLogout };

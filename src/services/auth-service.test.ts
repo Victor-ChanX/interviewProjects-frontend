@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { login } from "@/services/auth-service";
+import { login, logout } from "@/services/auth-service";
 
 const apiPost = vi.hoisted(() => vi.fn());
 
@@ -34,5 +34,23 @@ describe("login", () => {
     apiPost.mockRejectedValueOnce(failure);
 
     await expect(login({ username: "x", password: "y" })).rejects.toBe(failure);
+  });
+});
+
+describe("logout", () => {
+  it("posts to /api/auth/logout with the Bearer token (default auth) and no body", async () => {
+    apiPost.mockResolvedValueOnce({ ok: true });
+
+    await expect(logout()).resolves.toEqual({ ok: true });
+
+    expect(apiPost).toHaveBeenCalledWith("/api/auth/logout");
+  });
+
+  it("propagates the request error so the caller decides to clear the session anyway", async () => {
+    const failure = new Error("网络错误");
+
+    apiPost.mockRejectedValueOnce(failure);
+
+    await expect(logout()).rejects.toBe(failure);
   });
 });

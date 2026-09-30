@@ -23,8 +23,10 @@
 //   没收到任何帧就主动 close() 触发重连（半开连接浏览器不会自己报 close）。
 // - 重连：指数退避（500ms 起、上限 30s、带抖动 —— 首次 ≤ 600ms，给 B4「3 秒内」留足余量），
 //   auth 通过后归零；回前台 / online 立即重连；disconnectRealtime()（登出）不重连并清 lastSeq。
-//   认证被拒（4401）也不重连：token 已失效，等重新登录后由 connectRealtime() 再连
-//   （单飞 refresh 随后端 auth 一起落地后在这里接）。
+// - 认证被拒（auth 失败帧 / 4401 关闭）：多半是 access token 过期 —— 先调请求层的单飞
+//   refreshAccessToken()（与 HTTP 401 共用同一个 Promise，不另写刷新），成功就立即用新 token 重连一次；
+//   刷新失败（请求层已清会话、走 onAuthError）或重连后再次被拒才停止（status = closed），
+//   等重新登录后由 connectRealtime() 再连。「每次认证通过后才允许再刷一次」挡住两个坏 token 互相触发的循环。
 // - 状态给壳上的徽标用：reconnecting = 断线且已排重连（含重试中的 socket）；syncing = 带 sinceSeq
 //   重连成功、服务端正在补发 —— 补发没有结束帧，事件帧安静 syncSettleMs 后才算 open。
 // - 可注入 WebSocket 构造器与时钟：测试用假 socket 推帧，断言发出的帧与缓存变化。
@@ -33,6 +35,7 @@
 
 import { getAccessToken } from "@/lib/auth";
 import { queryClient } from "@/lib/query-client";
+import { refreshAccessToken } from "@/lib/request";
 import type { components } from "@/types/api.generated";
 
 export interface RealtimeEvent<T = unknown> {
@@ -107,6 +110,8 @@ export interface RealtimeConfig {
   url: string;
   /** 取 access token；返回 null 表示未登录，不建连。 */
   getToken: () => string | null;
+  /** 认证被拒时的续期（请求层的单飞刷新）：true = 新 token 已就位，可以重连。 */
+  refreshToken: () => Promise<boolean>;
   createSocket: SocketFactory;
   /** 收到 resync（补发有缺口）时的全量重拉。 */
   onResync: () => void;
@@ -165,6 +170,7 @@ function storeSeq(seq: number): void {
 const config: RealtimeConfig = {
   url: "",
   getToken: getAccessToken,
+  refreshToken: refreshAccessToken,
   createSocket: defaultSocket,
   onResync: () => {
     void queryClient.invalidateQueries();
@@ -182,7 +188,14 @@ let lastSeq = 0;
 let seqLoaded = false;
 let attempts = 0;
 let manuallyClosed = false;
+/** 认证被拒且不再尝试（刷新失败 / 刷新后仍被拒）：不重连，等下次 connectRealtime()。 */
 let authRejected = false;
+/** 这条 socket 上收到过 auth 失败帧：服务端随后关闭时（哪怕 code 不是 4401）按认证被拒处理。 */
+let authFailedFrame = false;
+/** 上次认证通过以来已经刷新过一次 token：再被拒就不刷了，两个坏 token 互相触发会无限循环。 */
+let refreshTried = false;
+/** 刷新进行中：回前台 / online 不要抢在新 token 就位前用旧 token 重连。 */
+let refreshPending = false;
 let awaitingPong = false;
 let windowListenersBound = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -285,7 +298,8 @@ function scheduleReconnect(): void {
 
 /** 回前台 / 网络恢复：跳过退避等待立即重连。 */
 function reconnectNow(): void {
-  if (manuallyClosed || authRejected || socket !== null) return;
+  if (manuallyClosed || authRejected || refreshPending || socket !== null)
+    return;
 
   clearReconnectTimer();
   openSocket();
@@ -395,6 +409,8 @@ function handleControl(
     case "auth":
       if (frame.success) {
         attempts = 0;
+        // 认证通过：下次再被拒时允许再刷一次。
+        refreshTried = false;
         startHeartbeat(ws);
 
         // 服务端报了当前 seq：作为补发点采用，之后断线就能真正补发。
@@ -413,8 +429,8 @@ function handleControl(
 
         everAuthenticated = true;
       } else {
-        // 服务端随后会以 4401 关闭；这里先标记，onclose 就不再排重连。
-        authRejected = true;
+        // 服务端随后会以 4401 关闭；这里先标记，onclose 按「认证被拒」走刷新 / 停止，不排退避重连。
+        authFailedFrame = true;
       }
 
       break;
@@ -509,12 +525,50 @@ function openSocket(): void {
     stopSyncSettle();
     socket = null;
 
-    if (event?.code === WS_CLOSE_UNAUTHORIZED) authRejected = true;
+    const unauthorized =
+      event?.code === WS_CLOSE_UNAUTHORIZED || authFailedFrame;
 
-    // 非手动关闭 → 排退避重连，状态是 reconnecting；登出 / 认证被拒才是 closed。
+    authFailedFrame = false;
+
     if (manuallyClosed || authRejected) setStatus("closed");
+    else if (unauthorized) handleUnauthorized();
+    // 非手动关闭 → 排退避重连，状态是 reconnecting；登出 / 认证被拒才是 closed。
     else scheduleReconnect();
   };
+}
+
+/**
+ * 认证被拒：这次认证通过以来还没刷过 → 单飞刷新，成功立即重连（新 token 由 getToken 重新取）；
+ * 已经刷过一次、或刷新失败（请求层已清会话并走 onAuthError）→ 停止，等重新登录。
+ */
+function handleUnauthorized(): void {
+  if (refreshTried) {
+    authRejected = true;
+    setStatus("closed");
+
+    return;
+  }
+
+  refreshTried = true;
+  refreshPending = true;
+  setStatus("reconnecting");
+
+  void config
+    .refreshToken()
+    .catch(() => false)
+    .then((refreshed) => {
+      refreshPending = false;
+
+      // 刷新期间登出了 / 重新登录后已另开连接：什么都不做。
+      if (manuallyClosed || socket !== null) return;
+
+      if (refreshed) {
+        openSocket();
+      } else {
+        authRejected = true;
+        setStatus("closed");
+      }
+    });
 }
 
 /**
@@ -525,6 +579,7 @@ export function connectRealtime(): void {
   if (typeof window === "undefined") return;
 
   authRejected = false;
+  refreshTried = false;
   manuallyClosed = false;
   bindWindowListeners();
   clearReconnectTimer();
@@ -576,5 +631,8 @@ export function resetRealtimeForTests(): void {
   status = "idle";
   manuallyClosed = false;
   authRejected = false;
+  authFailedFrame = false;
+  refreshTried = false;
+  refreshPending = false;
   seqLoaded = false;
 }

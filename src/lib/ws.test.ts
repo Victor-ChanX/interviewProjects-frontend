@@ -3,9 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const queryClient = vi.hoisted(() => ({ invalidateQueries: vi.fn() }));
 const getAccessToken = vi.hoisted(() => vi.fn<() => string | null>());
+const refreshAccessToken = vi.hoisted(() => vi.fn<() => Promise<boolean>>());
 
 vi.mock("@/lib/query-client", () => ({ queryClient }));
 vi.mock("@/lib/auth", () => ({ getAccessToken }));
+vi.mock("@/lib/request", () => ({ refreshAccessToken }));
 
 import {
   configureRealtime,
@@ -93,8 +95,10 @@ beforeEach(() => {
   vi.useFakeTimers();
   sockets.length = 0;
   getAccessToken.mockReturnValue("tok");
+  refreshAccessToken.mockResolvedValue(false);
   configureRealtime({
     url: "ws://test/ws",
+    refreshToken: refreshAccessToken,
     createSocket: (url) => {
       const socket = new FakeSocket(url);
 
@@ -462,20 +466,6 @@ describe("reconnect", () => {
     expect(getConnectionStatus()).toBe("closed");
   });
 
-  it("does not reconnect when the server rejects the token (4401)", () => {
-    connectRealtime();
-    lastSocket().open();
-    lastSocket().push({ type: "auth", success: false, code: "UNAUTHORIZED" });
-    lastSocket().drop(WS_CLOSE_UNAUTHORIZED);
-
-    vi.advanceTimersByTime(10_000);
-    expect(sockets).toHaveLength(1);
-
-    // 重新登录后显式 connectRealtime() 才再连。
-    connectRealtime();
-    expect(sockets).toHaveLength(2);
-  });
-
   it("reconnects immediately on the online event and does not double up with the backoff timer", () => {
     connectAndAuth();
     lastSocket().push({ seq: 5, type: "message", payload: {} });
@@ -536,5 +526,117 @@ describe("heartbeat", () => {
     expect(getConnectionStatus()).toBe("reconnecting");
     vi.advanceTimersByTime(100);
     expect(sockets).toHaveLength(2);
+  });
+});
+
+describe("unauthorized (4401) → refresh", () => {
+  /** 让 refreshToken 的 Promise 回调跑完（假时钟下用 advanceTimersByTimeAsync 冲微任务）。 */
+  const flush = () => vi.advanceTimersByTimeAsync(0);
+
+  it("refreshes the token once and reconnects immediately with the new one", async () => {
+    refreshAccessToken.mockImplementation(() => {
+      getAccessToken.mockReturnValue("tok2");
+
+      return Promise.resolve(true);
+    });
+    connectAndAuth();
+    lastSocket().drop(WS_CLOSE_UNAUTHORIZED);
+
+    // 刷新进行中：徽标是「重连中」，还没开新 socket。
+    expect(getConnectionStatus()).toBe("reconnecting");
+    expect(sockets).toHaveLength(1);
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+
+    await flush();
+
+    // 不等退避，刷新一成功就重连，认证帧带新 token。
+    expect(sockets).toHaveLength(2);
+    lastSocket().open();
+    expect(lastSocket().frames()).toEqual([
+      { type: "auth", accessToken: "tok2" },
+    ]);
+    lastSocket().push({ type: "auth", success: true });
+    expect(getConnectionStatus()).toBe("open");
+
+    // 认证通过后再被拒：允许再刷一次（不是一辈子只刷一次）。
+    lastSocket().drop(WS_CLOSE_UNAUTHORIZED);
+    await flush();
+    expect(refreshAccessToken).toHaveBeenCalledTimes(2);
+    expect(sockets).toHaveLength(3);
+  });
+
+  it("stops (closed, no reconnect) when the refresh fails", async () => {
+    connectAndAuth();
+    lastSocket().push({ type: "auth", success: false, code: "UNAUTHORIZED" });
+    lastSocket().drop(WS_CLOSE_UNAUTHORIZED);
+    await flush();
+
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+    expect(getConnectionStatus()).toBe("closed");
+
+    // 退避定时器 / 回前台都不再重连。
+    vi.advanceTimersByTime(10_000);
+    window.dispatchEvent(new Event("online"));
+    expect(sockets).toHaveLength(1);
+
+    // 重新登录后显式 connectRealtime() 才再连。
+    connectRealtime();
+    expect(sockets).toHaveLength(2);
+  });
+
+  it("does not refresh a second time when the reconnected socket is rejected again", async () => {
+    refreshAccessToken.mockResolvedValue(true);
+    connectAndAuth();
+    lastSocket().drop(WS_CLOSE_UNAUTHORIZED);
+    await flush();
+    expect(sockets).toHaveLength(2);
+
+    // 新 token 也被拒：不再刷、不再连，否则两个坏 token 会互相触发循环。
+    lastSocket().open();
+    lastSocket().drop(WS_CLOSE_UNAUTHORIZED);
+    await flush();
+    vi.advanceTimersByTime(10_000);
+
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+    expect(sockets).toHaveLength(2);
+    expect(getConnectionStatus()).toBe("closed");
+  });
+
+  it("treats an auth failure frame as unauthorized even when the close code is not 4401", async () => {
+    connectRealtime();
+    lastSocket().open();
+    lastSocket().push({ type: "auth", success: false, code: "UNAUTHORIZED" });
+    lastSocket().drop(1006);
+    await flush();
+
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(10_000);
+    expect(sockets).toHaveLength(1);
+    expect(getConnectionStatus()).toBe("closed");
+  });
+
+  it("does not reconnect while the refresh is pending, and honours a logout during it", async () => {
+    let resolveRefresh: (ok: boolean) => void = () => {};
+
+    refreshAccessToken.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    connectAndAuth();
+    lastSocket().drop(WS_CLOSE_UNAUTHORIZED);
+
+    // 回前台 / online 不能抢在新 token 就位前用旧 token 重连。
+    window.dispatchEvent(new Event("online"));
+    expect(sockets).toHaveLength(1);
+
+    disconnectRealtime();
+    resolveRefresh(true);
+    await flush();
+
+    // 刷新期间登出：结果作废，不重连。
+    expect(sockets).toHaveLength(1);
+    expect(getConnectionStatus()).toBe("closed");
   });
 });

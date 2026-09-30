@@ -2,15 +2,21 @@
 // （frontend-api-function-calls「Request Layer」）。业务代码只用 @/lib/api 的 api.get/post。
 //
 // access token 的存取在 src/lib/auth.ts（内存 + sessionStorage 备份）：这里只取来放进
-// Authorization，401 时调 clearSession() 清掉再交给 onAuthError（受保护布局的容器注入
-// 「跳登录页带 next」，src/components/app-shell/use-app-shell.ts）。
+// Authorization。
 //
-// TODO(#17 单飞 refresh)：后端 `POST /api/auth/refresh` 落地后，401 先在这里单飞刷新
-// （模块级 `let refreshing: Promise<void> | null`，并发 401 只发一次 refresh、各重放一次原请求，
-// 重放仍 401 才清会话走 onAuthError；refresh token 只在 HttpOnly cookie，请求带 credentials）。
-// 规则见 frontend-api-function-calls「请求层：401 与刷新」req.refresh-single-flight。
+// 401 与刷新（题目 B3 前端；#17，规则 frontend-api-function-calls「请求层：401 与刷新」
+// req.refresh-single-flight）：带 Authorization 的请求得到 401 → 先 refreshAccessToken()
+// （`POST /api/auth/refresh`，凭证是 HttpOnly cookie `refresh_token`，Path=/api/auth，请求带
+// credentials，不带 Bearer；前端 NEVER 读它、存它）→ 成功则 setAccessToken 并把原请求**重放一次**；
+// 重放仍 401 就当会话失效，不再刷（两个过期 token 会互相触发无限刷新）。
+// 单飞：模块级 `refreshing` 存着进行中的刷新 Promise，并发的 401 只 await 同一个，refresh 只发一次；
+// 刷新失败（refresh 也 401 / 网络错 / 响应里没有可解的 token）→ clearSession() + onAuthError()
+// （受保护布局的容器注入「跳登录页带 next」，src/components/app-shell/use-app-shell.ts），
+// 也只在那一次刷新里做一次。src/lib/ws.ts 收到 4401 时复用同一个 refreshAccessToken()。
+// refresh 的 fetch 写在这里而不是 services：请求层不能引 services（services → api → request 会成环），
+// 而这个文件本来就是 eslint「不裸 fetch」的豁免块。
 
-import { clearSession, getAccessToken } from "@/lib/auth";
+import { clearSession, getAccessToken, setAccessToken } from "@/lib/auth";
 
 export { getAccessToken } from "@/lib/auth";
 
@@ -151,7 +157,70 @@ async function parseBody<T>(
   return (await response.text()) as T;
 }
 
-// 401 刷新（单飞 refresh）随后端 `POST /api/auth/refresh` 一起落地（#17，见文件头 TODO）。
+// ---- 401 刷新（单飞）----
+
+const REFRESH_URL = "/api/auth/refresh";
+
+let refreshing: Promise<boolean> | null = null;
+
+function failRefresh(): false {
+  clearSession();
+  config.onAuthError();
+
+  return false;
+}
+
+/** 真正发一次 refresh；成功写入新 access token。所有失败都收敛成 false（并清会话、通知 onAuthError）。 */
+async function fetchRefreshedToken(): Promise<boolean> {
+  let response: Response;
+
+  try {
+    response = await fetch(buildUrl(REFRESH_URL), {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    });
+  } catch {
+    return failRefresh();
+  }
+
+  if (!response.ok) return failRefresh();
+
+  let data: unknown;
+
+  try {
+    data = await response.json();
+  } catch {
+    return failRefresh();
+  }
+
+  const accessToken =
+    data && typeof data === "object" && "accessToken" in data
+      ? (data as { accessToken: unknown }).accessToken
+      : null;
+
+  if (typeof accessToken !== "string" || !accessToken) return failRefresh();
+
+  setAccessToken(accessToken);
+
+  // setAccessToken 会把解不出身份 / 已过期的 token 当作无效丢掉：那也算刷新失败。
+  return getAccessToken() !== null ? true : failRefresh();
+}
+
+/**
+ * 用 HttpOnly cookie 里的 refresh token 换新 access token。单飞：进行中时返回同一个 Promise，
+ * 并发调用只发一次请求。resolve true = 新 token 已写入会话；false = 会话已清、onAuthError 已触发。
+ * 请求层 401 后与 src/lib/ws.ts 的 4401 都走这里；业务层 NEVER 直接调（req.no-refresh-in-feature）。
+ */
+export function refreshAccessToken(): Promise<boolean> {
+  if (refreshing === null) {
+    refreshing = fetchRefreshedToken().finally(() => {
+      refreshing = null;
+    });
+  }
+
+  return refreshing;
+}
 
 async function fetchWithRetry(
   url: string,
@@ -230,7 +299,7 @@ export async function request<T>(
     };
   };
 
-  const response = await fetchWithRetry(
+  let response = await fetchWithRetry(
     url,
     buildInit(),
     retries,
@@ -239,10 +308,25 @@ export async function request<T>(
   );
 
   // responseInterceptor 留在重试循环之外：HTTP 错误不重发，401 只走一次刷新。
-  // 登录接口自己传 auth: false：账号密码错的 401 不算会话失效。
+  // 登录接口自己传 auth: false：账号密码错的 401 不算会话失效，也不去刷新。
   if (response.status === 401 && auth) {
-    clearSession();
-    config.onAuthError();
+    // 单飞刷新：并发的 401 共用同一个 Promise。成功后用新 token 重放一次（buildInit 重新取 token）；
+    // 失败时刷新函数已清会话并通知 onAuthError，这里只把 401 照常抛出去。
+    if (await refreshAccessToken()) {
+      response = await fetchWithRetry(
+        url,
+        buildInit(),
+        retries,
+        timeout,
+        signal,
+      );
+
+      // 重放仍 401：新 token 也不被认，当会话失效处理，不再刷新。
+      if (response.status === 401) {
+        clearSession();
+        config.onAuthError();
+      }
+    }
   }
 
   if (!response.ok) {
