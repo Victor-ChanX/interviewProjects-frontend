@@ -19,6 +19,7 @@ import {
 } from "@/lib/activity-cache";
 import { formatActivity, type FormattedActivity } from "@/lib/activity-format";
 import { queryKeys } from "@/lib/query-keys";
+import { updateQueryData } from "@/lib/query-updates";
 import { ACTIVITY_EVENT_TYPES, type RealtimeEvent } from "@/lib/ws";
 import { listActivity } from "@/services/activity-service";
 import { listGroups } from "@/services/group-service";
@@ -55,9 +56,11 @@ export function useActivityFeed({ limit, maxHead }: UseActivityFeedOptions) {
 
       if (!item) return;
 
-      queryClient.setQueryData<ActivityData>(
+      // 「加载更早」/ 过期重拉进行中也不能被它的写回盖掉（前端 #16）。
+      updateQueryData<ActivityData>(
+        queryClient,
         queryKeys.activity.feed(limit),
-        (old) => (old ? prependActivity(old, item, maxHead) : old),
+        (old) => prependActivity(old, item, maxHead),
       );
     },
     [limit, maxHead, queryClient],

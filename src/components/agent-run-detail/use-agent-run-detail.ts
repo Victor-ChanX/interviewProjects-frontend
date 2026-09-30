@@ -1,15 +1,13 @@
 // 某次 agent run 的详情（前端 #5）：GET /api/agent-runs/:id → 缓存。
 // 实时：WS `agent_run` 事件只带 { runId, groupId, status, endReason }，不是整行，而且后端只在 run 创建
-// 与结束时发（每一步不发事件），所以同 runId 的事件一律 invalidate 重拉；running 期间再按固定间隔
-// 轮询把步骤刷出来（api.params-in-key：轮询用 refetchInterval，不用 useEffect）。
+// 与结束时发（每一步不发事件）—— 同 runId 的事件由应用壳的 useRealtimeQuerySync 按 key invalidate 重拉；
+// running 期间再按固定间隔轮询把步骤刷出来（api.params-in-key：轮询用 refetchInterval，不用 useEffect）。
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
-import { useRealtimeEvent } from "@/hooks/use-realtime";
 import { queryKeys } from "@/lib/query-keys";
 import { groupDisplayName, shortId } from "@/lib/short-id";
-import type { AgentRunEventPayload } from "@/lib/ws";
 import { getAgentRun } from "@/services/agent-run-service";
 import { listGroups } from "@/services/group-service";
 
@@ -17,8 +15,6 @@ import { listGroups } from "@/services/group-service";
 export const RUNNING_POLL_MS = 2_000;
 
 export function useAgentRunDetail(runId: string) {
-  const queryClient = useQueryClient();
-
   const query = useQuery({
     queryKey: queryKeys.agentRuns.detail(runId),
     queryFn: () => getAgentRun(runId),
@@ -43,20 +39,6 @@ export function useAgentRunDetail(runId: string) {
 
     return group ? groupDisplayName(group) : shortId(groupId);
   }, [groupId, groups]);
-
-  useRealtimeEvent<AgentRunEventPayload>(
-    "agent_run",
-    useCallback(
-      (payload) => {
-        if (payload.runId !== runId) return;
-
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.agentRuns.detail(runId),
-        });
-      },
-      [runId, queryClient],
-    ),
-  );
 
   return {
     run: query.data,

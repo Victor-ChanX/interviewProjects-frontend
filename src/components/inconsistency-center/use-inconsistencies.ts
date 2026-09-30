@@ -1,8 +1,9 @@
 // 异常中心这一条业务流（后端 #22）：页签（未处理 / 已处理，URL：`?tab=resolved`）→ 游标列表
 // （GET /api/inconsistencies?resolved=，useInfiniteQuery）→ 点一行在抽屉里看详情（GET /api/inconsistencies/:id，含 payload）
 // → admin「标记已处理」（POST …/resolve，幂等，返回含 resolvedBy）。
-// 实时：`inconsistency`（新记录）与 `inconsistency_resolved`（别人标记了）都让两个页签的列表重拉；
-// 被标记的那条详情就地写 resolvedAt / resolvedBy。未处理数（侧栏徽标、工作台）由应用壳的概览同步负责，这里不碰。
+// 实时：`inconsistency`（新记录）与 `inconsistency_resolved`（别人标记了）让两个页签的列表重拉 —— 由应用壳的
+// useRealtimeQuerySync 按 key invalidate（页面不在时也会让缓存过期）；这里只把被标记的那条详情就地写上
+// resolvedAt / resolvedBy（抽屉立刻变）。未处理数（侧栏徽标、工作台）由应用壳的概览同步负责，这里不碰。
 // 抽屉「开 / 看哪条」是两个 state：关只切 open，选中的那条留到下次打开再覆盖（浮层淡出期间内容不闪空）。
 
 import {
@@ -32,11 +33,6 @@ const TABS = [
   "open",
   "resolved",
 ] as const satisfies readonly InconsistencyTab[];
-
-const INCONSISTENCY_EVENTS = [
-  "inconsistency",
-  "inconsistency_resolved",
-] as const;
 
 const NO_ITEMS: InconsistencyRead[] = [];
 
@@ -76,29 +72,23 @@ export function useInconsistencies() {
     });
   }, [queryClient]);
 
-  useRealtimeEvent<unknown>(
-    INCONSISTENCY_EVENTS,
+  useRealtimeEvent<InconsistencyResolvedEventPayload>(
+    "inconsistency_resolved",
     useCallback(
-      (payload, event) => {
-        if (event.type === "inconsistency_resolved") {
-          const resolved = payload as InconsistencyResolvedEventPayload;
-
-          queryClient.setQueryData<InconsistencyDetail>(
-            queryKeys.inconsistencies.detail(resolved.id),
-            (old) =>
-              old
-                ? {
-                    ...old,
-                    resolvedAt: resolved.resolvedAt,
-                    resolvedBy: resolved.resolvedBy,
-                  }
-                : old,
-          );
-        }
-
-        invalidateLists();
+      (resolved) => {
+        queryClient.setQueryData<InconsistencyDetail>(
+          queryKeys.inconsistencies.detail(resolved.id),
+          (old) =>
+            old
+              ? {
+                  ...old,
+                  resolvedAt: resolved.resolvedAt,
+                  resolvedBy: resolved.resolvedBy,
+                }
+              : old,
+        );
       },
-      [invalidateLists, queryClient],
+      [queryClient],
     ),
   );
 

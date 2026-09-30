@@ -1,12 +1,12 @@
 // container：hook 编排 + 权限分支 + 开关的 toast；渲染就绪的数据与回调通过 props 交给 view。
-// 实时订阅都在各自的 hook 里（use-group-detail / use-message-timeline / use-agent-runs）；
-// 账号状态事件复用 src/hooks/use-account-events.ts，让发消息表单的「在线账号」跟着变。
+// 事件 → 缓存的 invalidate 由应用壳里的 useRealtimeQuerySync 统一做；这里的 hook 只留就地合并
+// （use-group-detail 的开关 / 状态、use-message-timeline 的最新页）。发消息表单的「在线账号」由应用壳里的
+// useAccountEvents 跟着账号状态事件变。
 // 全部退群（前端 #10）只给 admin：确认 / 提交 / 进度在 use-leave-all。
 
 import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 
-import { useAccountEvents } from "@/hooks/use-account-events";
 import { useSession } from "@/hooks/use-session";
 import { getErrorMessage } from "@/lib/get-error-message";
 import type { GroupMemberRead, GroupStatus } from "@/services/group-service";
@@ -52,8 +52,6 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
   const { toggleSetting, refetch: refetchDetail } = detail;
   const { refetch: refetchTimeline } = timeline;
   const { refetch: refetchAgentRuns } = agentRuns;
-
-  useAccountEvents();
 
   const onToggleSetting = useCallback(
     async (setting: GroupSetting, value: boolean) => {

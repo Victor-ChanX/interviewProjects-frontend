@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // 全局 Agent 运行列表：筛选来自 URL（工作台「需要处理」带 ?status=blocked 跳进来），「全部」不带参数；
-// 群下拉的选项用网关群 ID；agent_run 事件按列表前缀重拉。
+// 群下拉的选项用网关群 ID。agent_run 事件按列表前缀重拉由 useRealtimeQuerySync 负责（它的同位测试）。
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
@@ -8,23 +8,11 @@ import { withNuqsTestingAdapter } from "nuqs/adapters/testing";
 import { createElement, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { queryKeys } from "@/lib/query-keys";
-import type { RealtimeEvent, RealtimeListener } from "@/lib/ws";
-
 import { useAgentRunList } from "./use-agent-run-list";
 
-const listeners = vi.hoisted(() => new Set<(event: RealtimeEvent) => void>());
 const listAgentRuns = vi.hoisted(() => vi.fn());
 const listGroups = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/ws", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/ws")>()),
-  subscribeRealtime: (listener: RealtimeListener) => {
-    listeners.add(listener);
-
-    return () => listeners.delete(listener);
-  },
-}));
 vi.mock("@/services/agent-run-service", () => ({ listAgentRuns }));
 vi.mock("@/services/group-service", () => ({ listGroups }));
 
@@ -32,7 +20,6 @@ function setup(search: string) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  const invalidate = vi.spyOn(queryClient, "invalidateQueries");
   const Nuqs = withNuqsTestingAdapter({
     searchParams: search,
     hasMemory: true,
@@ -44,11 +31,10 @@ function setup(search: string) {
       createElement(Nuqs, null, children),
     );
 
-  return { invalidate, ...renderHook(() => useAgentRunList(), { wrapper }) };
+  return renderHook(() => useAgentRunList(), { wrapper });
 }
 
 afterEach(() => {
-  listeners.clear();
   vi.clearAllMocks();
 });
 
@@ -79,11 +65,11 @@ describe("useAgentRunList", () => {
     );
   });
 
-  it("drops the status parameter for 全部 and reloads on agent_run events", async () => {
+  it("drops the status parameter for 全部", async () => {
     listAgentRuns.mockResolvedValue({ items: [], nextCursor: null });
     listGroups.mockResolvedValue([]);
 
-    const { result, invalidate } = setup("?status=failed");
+    const { result } = setup("?status=failed");
 
     await waitFor(() => expect(listAgentRuns).toHaveBeenCalledTimes(1));
 
@@ -97,18 +83,5 @@ describe("useAgentRunList", () => {
         limit: 30,
       }),
     );
-
-    act(() => {
-      for (const listener of listeners)
-        listener({
-          seq: 1,
-          type: "agent_run",
-          payload: { runId: "r1", groupId: "g1", status: "running" },
-        });
-    });
-
-    expect(invalidate).toHaveBeenCalledWith({
-      queryKey: queryKeys.agentRuns.lists(),
-    });
   });
 });

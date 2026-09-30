@@ -1,17 +1,13 @@
 // 全局 Agent 运行列表（后端 #22 `GET /api/agent-runs?status=&groupId=&before=&limit=`）：
 // 筛选（状态页签、按群）存 URL（nuqs：`?status=blocked&group=<id>`，工作台「需要处理」直接带参数跳进来），
 // 游标分页用 useInfiniteQuery（「加载更多」接在最后一页）。WS `agent_run` 事件只带 { runId, groupId, status }，
-// 本地判不出新 run 属不属于当前筛选，所以按列表前缀 invalidate（maxPages 限住重拉的页数）。
+// 本地判不出新 run 属不属于当前筛选，所以由应用壳的 useRealtimeQuerySync 按列表前缀 invalidate
+// （maxPages 限住重拉的页数）。
 
-import {
-  useInfiniteQuery,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { useCallback, useMemo } from "react";
 
-import { useRealtimeEvent } from "@/hooks/use-realtime";
 import { AGENT_RUN_STATUS_FILTERS } from "@/lib/agent-run-labels";
 import { queryKeys } from "@/lib/query-keys";
 import { groupDisplayName } from "@/lib/short-id";
@@ -33,7 +29,6 @@ const FILTER_PARSERS = {
 const NO_RUNS: AgentRunListItem[] = [];
 
 export function useAgentRunList() {
-  const queryClient = useQueryClient();
   const [filters, setFilters] = useQueryStates(FILTER_PARSERS);
   const { status, group } = filters;
 
@@ -56,15 +51,6 @@ export function useAgentRunList() {
     queryFn: listGroups,
     meta: { silent: true },
   });
-
-  useRealtimeEvent(
-    "agent_run",
-    useCallback(() => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentRuns.lists(),
-      });
-    }, [queryClient]),
-  );
 
   const runs = useMemo(
     () => query.data?.pages.flatMap((page) => page.items) ?? NO_RUNS,

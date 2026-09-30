@@ -12,6 +12,9 @@
 // 同一时刻多条事件只发一次请求：进行中的标记 again，完成后再拉一次兜住这期间的变化。
 // 首页请求进行中到达的事件（首屏加载、invalidate 后的重拉）：那次请求可能早于这条消息落库，
 // 缓存里又还没有数据可并 —— 记一笔，首页请求回来后再拉一次首页（前端 #14，headFetches）。
+// 缓存里已有数据、但正在请求（「加载更早」、invalidate 后的整体重拉）时，这次请求结束会把开始时的
+// 缓存副本整份写回，期间并进来的新消息 / 投递状态会被覆盖（前端 #16）—— 所有写时间线缓存的地方都走
+// @/lib/query-updates 的 updateQueryData：立刻生效，并在请求结束后于写回结果上按顺序重放（更新都是幂等的）。
 
 import {
   useInfiniteQuery,
@@ -22,6 +25,7 @@ import { useCallback, useMemo, useRef } from "react";
 
 import { useRealtimeEvent } from "@/hooks/use-realtime";
 import { queryKeys } from "@/lib/query-keys";
+import { updateQueryData } from "@/lib/query-updates";
 import type { MessageEventPayload } from "@/lib/ws";
 import {
   listMessages,
@@ -159,8 +163,8 @@ async function refreshHeadPage(
         return;
       }
 
-      queryClient.setQueryData<TimelineData>(key, (old) =>
-        old ? mergeHeadPage(old, fresh) : old,
+      updateQueryData<TimelineData>(queryClient, key, (old) =>
+        mergeHeadPage(old, fresh),
       );
     } while (state.again);
   } catch {
@@ -198,28 +202,21 @@ export function useMessageTimeline(groupId: string) {
 
       if (headFetch) headFetch.dirty = true;
 
-      const current = queryClient.getQueryData<TimelineData>(
-        queryKeys.messages.timeline(groupId),
-      );
+      const key = queryKeys.messages.timeline(groupId);
+      const current = queryClient.getQueryData<TimelineData>(key);
 
       if (!current) return;
 
-      let matched = false;
+      // 缓存里已有这一行（自己的消息）：就地写投递状态。
+      if (applyDeliveryUpdate(current, payload)) {
+        updateQueryData<TimelineData>(
+          queryClient,
+          key,
+          (old) => applyDeliveryUpdate(old, payload) ?? old,
+        );
 
-      queryClient.setQueryData<TimelineData>(
-        queryKeys.messages.timeline(groupId),
-        (old) => {
-          if (!old) return old;
-
-          const next = applyDeliveryUpdate(old, payload);
-
-          matched = next !== null;
-
-          return next ?? old;
-        },
-      );
-
-      if (matched) return;
+        return;
+      }
 
       // 换了群就换一份状态；同群复用，保证单飞。
       if (refreshState.current?.groupId !== groupId)

@@ -1,13 +1,17 @@
 // container：登录守卫（无会话 → 先静默续期一次（checking）→ 仍无会话 → /login?next=）+ 后台布局的编排；
-// 视觉结构在 view。工作台概览的 WS 同步挂在这里一次（侧栏「异常中心」的未处理数与工作台共用那份缓存）。
+// 视觉结构在 view。WS 事件 → 缓存的同步都挂在这里一次、不随页面卸载（前端 #16）：通用的按 key invalidate
+// （useRealtimeQuerySync）、账号状态就地改（useAccountEvents）、工作台概览（侧栏「异常中心」的未处理数与
+// 工作台共用那份缓存）。
 
 import type { ReactNode } from "react";
 import { Navigate } from "react-router";
 
+import { useAccountEvents } from "@/hooks/use-account-events";
 import {
   useDashboardSummary,
   useDashboardSummarySync,
 } from "@/hooks/use-dashboard-summary";
+import { useRealtimeQuerySync } from "@/hooks/use-realtime-query-sync";
 import { ROLE_LABELS } from "@/lib/auth";
 import { connectionBadge } from "@/lib/connection-labels";
 
@@ -25,6 +29,8 @@ export function AppShellContainer({ children }: { children: ReactNode }) {
   const shell = useAppShell();
   const loggedIn = shell.session !== null;
 
+  useRealtimeQuerySync();
+  useAccountEvents();
   useDashboardSummarySync();
 
   const { summary } = useDashboardSummary({ enabled: loggedIn });

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// job 进度 hook：轮询到终态就停、终态回调只调一次、WS `job` 事件按 jobId 触发重拉。
-// service 层与 @/lib/ws 的订阅都 mock；轮询用假时钟推进（不等真实时间），所以这里不用 waitFor
-// （它的轮询计时器同样被假时钟接管），改用 act + advanceTimersByTimeAsync 冲刷。
+// job 进度 hook：轮询到终态就停、终态回调只调一次（WS `job` 事件按 jobId 的 invalidate 由
+// useRealtimeQuerySync 负责，见它的同位测试）。service 层 mock；轮询用假时钟推进（不等真实时间），
+// 所以这里不用 waitFor（它的轮询计时器同样被假时钟接管），改用 act + advanceTimersByTimeAsync 冲刷。
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
@@ -13,22 +13,10 @@ import {
   jobRefetchInterval,
   useJobProgress,
 } from "@/hooks/use-job-progress";
-import type { RealtimeEvent, RealtimeListener } from "@/lib/ws";
 import type { JobRead } from "@/services/job-service";
 
-const listeners = vi.hoisted(() => new Set<(event: unknown) => void>());
 const getJob = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/ws", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/ws")>()),
-  subscribeRealtime: (listener: RealtimeListener) => {
-    listeners.add(listener as (event: unknown) => void);
-
-    return () => {
-      listeners.delete(listener as (event: unknown) => void);
-    };
-  },
-}));
 vi.mock("@/services/job-service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/job-service")>()),
   getJob,
@@ -46,16 +34,6 @@ function job(overrides: Partial<JobRead>): JobRead {
     finishedAt: null,
     ...overrides,
   };
-}
-
-let seq = 0;
-
-function push(type: string, payload: unknown) {
-  const event: RealtimeEvent = { seq: (seq += 1), type, payload };
-
-  act(() => {
-    for (const listener of listeners) listener(event);
-  });
 }
 
 /** 请求回来之后 TanStack 通知订阅者、React 重渲染排在其后的几个定时器里；远小于轮询间隔。 */
@@ -91,7 +69,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  listeners.clear();
   vi.clearAllMocks();
 });
 
@@ -195,26 +172,6 @@ describe("useJobProgress", () => {
     rerender({ id: "j1", settled: next });
     await tick(0);
     expect(next).not.toHaveBeenCalled();
-  });
-
-  it("refetches on a WS job event for this job only", async () => {
-    getJob
-      .mockResolvedValueOnce(job({ step: "create" }))
-      .mockResolvedValue(job({ step: "invite" }));
-
-    const { result } = setup("j1");
-
-    await tick(0);
-    expect(getJob).toHaveBeenCalledTimes(1);
-
-    push("job", { jobId: "other", status: "running", step: "create" });
-    await tick(0);
-    expect(getJob).toHaveBeenCalledTimes(1);
-
-    push("job", { jobId: "j1", status: "running", step: "invite" });
-    await tick(0);
-    expect(getJob).toHaveBeenCalledTimes(2);
-    expect(result.current.job?.step).toBe("invite");
   });
 
   it("exposes the request error while the job is unknown", async () => {

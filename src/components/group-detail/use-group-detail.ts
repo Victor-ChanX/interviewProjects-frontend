@@ -1,7 +1,7 @@
 // 群详情这一条业务流：GET /api/groups/:id → 缓存；开关走 PATCH（mutateAsync 由容器包 try/catch + toast）；
-// 本群的实时事件回写缓存：group_settings_changed 就地改开关，member_changed / group_status_changed /
-// agent_run（activeAgentRunId 变了）/ sequence_run（activeSequenceRunId 变了）按 key invalidate。
-// 事件只带 id 与变化，不是整行实体，所以除开关外都重拉。
+// 本群的实时事件：group_settings_changed / group_status_changed 就地改开关 / 状态（页面立刻变）；
+// 按 key invalidate（成员、进行中的 run / 序列、权威整行）由应用壳的 useRealtimeQuerySync 统一做 ——
+// 页面不在时也会让缓存过期（前端 #16）。
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
@@ -9,10 +9,8 @@ import { useCallback, useState } from "react";
 import { useRealtimeEvent } from "@/hooks/use-realtime";
 import { queryKeys } from "@/lib/query-keys";
 import type {
-  AgentRunEventPayload,
   GroupSettingsChangedEventPayload,
   GroupStatusChangedEventPayload,
-  MemberChangedEventPayload,
 } from "@/lib/ws";
 import {
   getGroup,
@@ -20,7 +18,6 @@ import {
   patchGroup,
   type PatchGroupPayload,
 } from "@/services/group-service";
-import type { SequenceRunEventPayload } from "@/services/sequence-service";
 
 import type { GroupSetting } from "./types";
 
@@ -39,12 +36,6 @@ export function useGroupDetail(groupId: string) {
     mutationFn: (patch: PatchGroupPayload) => patchGroup(groupId, patch),
   });
   const { mutateAsync } = mutation;
-
-  const invalidateDetail = useCallback(() => {
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.groups.detail(groupId),
-    });
-  }, [groupId, queryClient]);
 
   useRealtimeEvent<GroupSettingsChangedEventPayload>(
     "group_settings_changed",
@@ -78,40 +69,8 @@ export function useGroupDetail(groupId: string) {
           queryKeys.groups.detail(groupId),
           (old) => (old ? { ...old, status: payload.to } : old),
         );
-        // 群列表里的状态列也变了。
-        void queryClient.invalidateQueries({ queryKey: queryKeys.groups.all });
       },
       [groupId, queryClient],
-    ),
-  );
-
-  useRealtimeEvent<MemberChangedEventPayload>(
-    "member_changed",
-    useCallback(
-      (payload) => {
-        if (payload.groupId === groupId) invalidateDetail();
-      },
-      [groupId, invalidateDetail],
-    ),
-  );
-
-  useRealtimeEvent<AgentRunEventPayload>(
-    "agent_run",
-    useCallback(
-      (payload) => {
-        if (payload.groupId === groupId) invalidateDetail();
-      },
-      [groupId, invalidateDetail],
-    ),
-  );
-
-  useRealtimeEvent<SequenceRunEventPayload>(
-    "sequence_run",
-    useCallback(
-      (payload) => {
-        if (payload.groupId === groupId) invalidateDetail();
-      },
-      [groupId, invalidateDetail],
     ),
   );
 

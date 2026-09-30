@@ -1,6 +1,7 @@
 // 账号域的实时事件 → TanStack Query 缓存（frontend-realtime-events；前端 #3）。
 // 事件进缓存的唯一途径是 queryClient.setQueryData / invalidateQueries，key 取自 @/lib/query-keys；
-// container 调它，view 不知道有连接存在。订阅走 use-realtime 的 useRealtimeEvent，卸载只退订。
+// 应用壳（app-shell-container）挂一次、不随页面卸载（前端 #16：账号列表 / 建群弹窗 / 发消息表单都读这份缓存，
+// 不在页面上时来的事件也要让它过期），view 不知道有连接存在。订阅走 use-realtime 的 useRealtimeEvent。
 //
 // 后端推的是 { accountId, from, to } / { accountId, status }，不是整行实体（题目 2.3 WS type 列表），
 // 所以先把缓存里那一行的 status 就地改掉（页面立刻变），再 invalidate 让 REST 拿回权威的

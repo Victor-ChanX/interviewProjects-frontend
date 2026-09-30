@@ -4,9 +4,9 @@
 // 201 { runId } 后展示该 run 的进度（GET /api/sequence-runs/:id）。
 // - 422 UNRESOLVED_PLACEHOLDER：从信封取 { stepIndex, key } 给表单高亮并 toast；409 SEQUENCE_ALREADY_RUNNING：toast。
 // - 群里已有进行中的序列（GroupRead.activeSequenceRunId）时直接展示它的进度。
-// - 实时：WS `sequence_run` 事件只带 { runId, groupId, status, currentStepIndex }，不是整行，所以本群的事件按
-//   runId invalidate 重拉（群详情的 activeSequenceRunId 也随之变）；running 期间再按固定间隔轮询兜底
-//   （api.params-in-key：轮询用 refetchInterval，不用 useEffect）。
+// - 实时：WS `sequence_run` 事件只带 { runId, groupId, status, currentStepIndex }，不是整行，由应用壳的
+//   useRealtimeQuerySync 按 runId 与群详情（activeSequenceRunId 也随之变）invalidate 重拉；running 期间再按
+//   固定间隔轮询兜底（api.params-in-key：轮询用 refetchInterval，不用 useEffect）。
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -14,7 +14,6 @@ import { useCallback, useMemo, useState } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 
-import { useRealtimeEvent } from "@/hooks/use-realtime";
 import { getErrorMessage } from "@/lib/get-error-message";
 import { queryKeys } from "@/lib/query-keys";
 import {
@@ -28,7 +27,6 @@ import {
   getUnresolvedPlaceholder,
   isSequenceAlreadyRunning,
   listSequences,
-  type SequenceRunEventPayload,
   type SequenceStepDefinition,
   type StartSequenceRunPayload,
   startSequenceRun,
@@ -133,22 +131,6 @@ export function useSequenceRun({
       queryKey: queryKeys.groups.detail(groupId),
     });
   }, [groupId, queryClient]);
-
-  useRealtimeEvent<SequenceRunEventPayload>(
-    "sequence_run",
-    useCallback(
-      (payload) => {
-        if (payload.groupId !== groupId) return;
-
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.sequenceRuns.detail(payload.runId),
-        });
-        // activeSequenceRunId 跟着 run 的开始 / 结束变。
-        invalidateGroup();
-      },
-      [groupId, invalidateGroup, queryClient],
-    ),
-  );
 
   /** 提交 = 本地预检并打开弹窗；解析不到的 key 在弹窗里标红，启动按钮禁用，不发请求。 */
   const onValid = useCallback(

@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { RealtimeEvent, RealtimeListener } from "@/lib/ws";
 import type {
   AgentRunDetail,
   AgentStepRead,
@@ -12,38 +11,16 @@ import type {
 
 import { useAgentRunDetail } from "./use-agent-run-detail";
 
-const listeners = vi.hoisted(() => new Set<(event: unknown) => void>());
 const getAgentRun = vi.hoisted(() => vi.fn());
 const listGroups = vi.hoisted(() =>
   vi.fn().mockResolvedValue([{ id: "g1", gatewayGroupId: "g_abc" }]),
 );
 
-vi.mock("@/lib/ws", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/ws")>()),
-  subscribeRealtime: (listener: RealtimeListener) => {
-    listeners.add(listener as (event: unknown) => void);
-
-    return () => {
-      listeners.delete(listener as (event: unknown) => void);
-    };
-  },
-}));
 vi.mock("@/services/group-service", () => ({ listGroups }));
 vi.mock("@/services/agent-run-service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/agent-run-service")>()),
   getAgentRun,
 }));
-
-let seq = 0;
-
-/** 假装 ws.ts 派发了一帧：同步调用所有订阅者。 */
-function push(type: string, payload: unknown) {
-  const event: RealtimeEvent = { seq: (seq += 1), type, payload };
-
-  act(() => {
-    for (const listener of listeners) listener(event);
-  });
-}
 
 const protocolStep: AgentStepRead = {
   index: 1,
@@ -91,7 +68,6 @@ function setup(runId = "r1") {
 }
 
 afterEach(() => {
-  listeners.clear();
   vi.clearAllMocks();
 });
 
@@ -114,44 +90,6 @@ describe("useAgentRunDetail", () => {
     expect(result.current.blocked).toBe(false);
     // 所在群用网关群 ID 显示（群列表缓存里查）。
     await waitFor(() => expect(result.current.groupName).toBe("g_abc"));
-  });
-
-  it("refetches after an agent_run event for the same runId and ignores other runs", async () => {
-    const running = run({
-      status: "running",
-      endReason: null,
-      finishedAt: null,
-      steps: [],
-      stepCount: 0,
-    });
-    const finished = run();
-
-    getAgentRun.mockResolvedValueOnce(running).mockResolvedValueOnce(finished);
-
-    const { result } = setup();
-
-    await waitFor(() => expect(result.current.run?.status).toBe("running"));
-
-    push("agent_run", {
-      runId: "r2",
-      groupId: "g1",
-      status: "finished",
-      endReason: "final",
-    });
-    push("message", { groupId: "g1", msgId: "m1", isOwn: false });
-
-    expect(getAgentRun).toHaveBeenCalledTimes(1);
-
-    push("agent_run", {
-      runId: "r1",
-      groupId: "g1",
-      status: "finished",
-      endReason: "final",
-    });
-
-    await waitFor(() => expect(result.current.run?.status).toBe("finished"));
-    expect(getAgentRun).toHaveBeenCalledTimes(2);
-    expect(result.current.run?.steps).toEqual([protocolStep]);
   });
 
   it("flags a blocked run", async () => {

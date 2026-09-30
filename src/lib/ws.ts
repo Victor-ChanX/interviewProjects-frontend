@@ -73,13 +73,6 @@ export type AgentRunEventPayload = {
   endReason: components["schemas"]["AgentRunEndReason"] | null;
 };
 
-export type MemberChangedEventPayload = {
-  groupId: string;
-  platformUserId: string;
-  accountId: string | null;
-  change: "joined" | "left" | "promoted";
-};
-
 export type GroupStatusChangedEventPayload = {
   groupId: string;
   from: components["schemas"]["GroupStatus"];

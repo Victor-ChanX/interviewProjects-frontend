@@ -10,9 +10,10 @@ import { toast } from "sonner";
 
 import { getErrorMessage } from "@/lib/get-error-message";
 import { queryKeys } from "@/lib/query-keys";
+import { updateQueryData } from "@/lib/query-updates";
 import { listAccounts } from "@/services/account-service";
 import type { GroupMemberRead } from "@/services/group-service";
-import { sendMessage } from "@/services/message-service";
+import { type MessageRead, sendMessage } from "@/services/message-service";
 
 import {
   EMPTY_SEND_MESSAGE_FORM,
@@ -78,22 +79,23 @@ export function useSendMessage({
           members.find((member) => member.accountId === values.accountId)
             ?.platformUserId ?? values.accountId;
 
-        queryClient.setQueryData<TimelineData>(
+        const queued: MessageRead = {
+          clientMsgId,
+          msgId: null,
+          isOwn: true,
+          senderPlatformUserId: sender,
+          text: values.text,
+          // 受理时刻；发出后由重拉的最新页换成网关的 sentAt。
+          sentAt: new Date().toISOString(),
+          deliveryStatus: "queued",
+          failCode: null,
+        };
+
+        // 「加载更早」进行中也不能被它的写回盖掉（前端 #16）。
+        updateQueryData<TimelineData>(
+          queryClient,
           queryKeys.messages.timeline(groupId),
-          (old) =>
-            old
-              ? prependOwnMessage(old, {
-                  clientMsgId,
-                  msgId: null,
-                  isOwn: true,
-                  senderPlatformUserId: sender,
-                  text: values.text,
-                  // 受理时刻；发出后由重拉的最新页换成网关的 sentAt。
-                  sentAt: new Date().toISOString(),
-                  deliveryStatus: "queued",
-                  failCode: null,
-                })
-              : old,
+          (old) => prependOwnMessage(old, queued),
         );
         resetField("text");
         toast.success("已受理，排队发送中");

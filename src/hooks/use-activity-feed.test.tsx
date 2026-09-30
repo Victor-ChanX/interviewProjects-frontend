@@ -114,4 +114,47 @@ describe("useActivityFeed", () => {
     );
     expect(result.current.entries[0].href).toBe("/agent-runs/r1");
   });
+
+  // 前端 #16：「加载更早」写回的是开始时的已加载页 + 更早一页，期间插到头部的事件不能被盖掉
+  it("keeps an event pushed while 加载更早 is in flight", async () => {
+    let releaseOlder: (page: unknown) => void = () => {};
+
+    listActivity
+      .mockResolvedValueOnce({ items: [item(3), item(2)], nextCursor: "c1" })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseOlder = resolve;
+          }),
+      );
+    listGroups.mockResolvedValue([]);
+
+    const { result } = renderHook(() => useActivityFeed({ limit: 20 }), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(result.current.entries).toHaveLength(2));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.loadingMore).toBe(true));
+
+    act(() =>
+      push({
+        seq: 4,
+        type: "agent_run",
+        payload: { runId: "r1", groupId: GROUP_ID, status: "running" },
+      }),
+    );
+
+    await act(async () => {
+      releaseOlder({ items: [item(1)], nextCursor: null });
+    });
+
+    await waitFor(() => expect(result.current.loadingMore).toBe(false));
+    expect(result.current.entries.map((entry) => entry.key)).toEqual([
+      "4",
+      "3",
+      "2",
+      "1",
+    ]);
+  });
 });

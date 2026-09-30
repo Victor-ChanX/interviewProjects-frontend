@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // 序列运行 hook：本地预检不通过不调后端；通过后调 startSequenceRun 并展示该 run；后端 422 高亮 stepIndex / key；
-// 409 提示「已有运行中的序列」；`sequence_run` 事件按 runId invalidate。service 层、实时连接、sonner 都 mock。
+// 409 提示「已有运行中的序列」。service 层与 sonner 都 mock；`sequence_run` 事件的 invalidate 由
+// useRealtimeQuerySync 负责（它的同位测试）。
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
@@ -13,7 +14,6 @@ import {
 } from "@/components/sequence-run/use-sequence-run";
 import { queryKeys } from "@/lib/query-keys";
 import { RequestError } from "@/lib/request";
-import type { RealtimeEvent, RealtimeListener } from "@/lib/ws";
 import type { GroupRead } from "@/services/group-service";
 import type {
   SequenceRead,
@@ -27,7 +27,6 @@ const service = vi.hoisted(() => ({
   getSequenceRun: vi.fn(),
 }));
 const getGroup = vi.hoisted(() => vi.fn());
-const listeners = vi.hoisted(() => new Set<(event: RealtimeEvent) => void>());
 
 vi.mock("sonner", () => ({ toast }));
 
@@ -40,19 +39,6 @@ vi.mock("@/services/group-service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/group-service")>()),
   getGroup,
 }));
-
-vi.mock("@/lib/ws", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/ws")>()),
-  subscribeRealtime: (listener: RealtimeListener) => {
-    listeners.add(listener);
-
-    return () => listeners.delete(listener);
-  },
-}));
-
-function push(event: RealtimeEvent): void {
-  for (const listener of listeners) listener(event);
-}
 
 const GROUP: GroupRead = {
   id: "g1",
@@ -170,7 +156,6 @@ async function submitPreflight(result: { current: Hook }) {
 }
 
 afterEach(() => {
-  listeners.clear();
   window.sessionStorage.clear();
   vi.clearAllMocks();
 });
@@ -341,48 +326,6 @@ describe("useSequenceRun", () => {
     expect(result.current.runId).toBe("run-1");
     expect(result.current.disabledReason).toBe(ALREADY_RUNNING_MESSAGE);
     expect(service.startSequenceRun).not.toHaveBeenCalled();
-  });
-
-  it("invalidates the run and the group on a sequence_run event for this group only", async () => {
-    const { result, invalidate } = setup();
-
-    await waitFor(() => expect(result.current.group).toEqual(GROUP));
-    invalidate.mockClear();
-
-    act(() => {
-      push({
-        seq: 1,
-        type: "sequence_run",
-        payload: {
-          runId: "run-9",
-          groupId: "g-other",
-          status: "finished",
-          currentStepIndex: 2,
-        },
-      });
-    });
-
-    expect(invalidate).not.toHaveBeenCalled();
-
-    act(() => {
-      push({
-        seq: 2,
-        type: "sequence_run",
-        payload: {
-          runId: "run-1",
-          groupId: "g1",
-          status: "finished",
-          currentStepIndex: 2,
-        },
-      });
-    });
-
-    expect(invalidate).toHaveBeenCalledWith({
-      queryKey: queryKeys.sequenceRuns.detail("run-1"),
-    });
-    expect(invalidate).toHaveBeenCalledWith({
-      queryKey: queryKeys.groups.detail("g1"),
-    });
   });
 
   it("fills missing placeholder keys from the selected sequence as empty vars rows", async () => {

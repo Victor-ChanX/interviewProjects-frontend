@@ -1,11 +1,10 @@
 // container：hook 编排 + 路由跳转 + 权限分支；渲染就绪的数据与回调通过 props 交给 view。
-// 新建群（前端 #10）只给 admin：弹窗的表单 / 提交 / 进度都在 use-create-group；账号状态事件复用
-// src/hooks/use-account-events.ts，让弹窗里的「在线账号」跟着变。
+// 新建群（前端 #10）只给 admin：弹窗的表单 / 提交 / 进度都在 use-create-group；弹窗里的「在线账号」
+// 由应用壳里的 useAccountEvents 跟着账号状态事件变。
 
 import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router";
 
-import { useAccountEvents } from "@/hooks/use-account-events";
 import { useSession } from "@/hooks/use-session";
 
 import { GroupListView } from "./group-list-view";
@@ -19,8 +18,6 @@ export function GroupListContainer() {
   const list = useGroupList();
   const create = useCreateGroup({ enabled: canWrite });
   const { refetch } = list;
-
-  useAccountEvents();
 
   const onOpen = useCallback(
     (id: string) => {

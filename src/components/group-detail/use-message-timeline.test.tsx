@@ -254,6 +254,83 @@ describe("useMessageTimeline", () => {
     });
   });
 
+  // 前端 #16：TanStack v5 的 fetchNextPage 在开始时拿走已加载页的副本、结束时写回「副本 + 更早一页」，
+  // 期间 setQueryData 并进来的新消息会被覆盖掉
+  it("keeps a new message merged while 加载更早 is in flight", async () => {
+    const m4 = msg({ msgId: "m4", sentAt: "2026-09-30T10:04:00.000Z" });
+    let releaseOlder: (page: MessagePage) => void = () => {};
+
+    listMessages
+      .mockResolvedValueOnce(FIRST_PAGE)
+      .mockImplementationOnce(
+        () =>
+          new Promise<MessagePage>((resolve) => {
+            releaseOlder = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ items: [m4, own, m2], nextCursor: "cur1" });
+
+    const { result } = setup();
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.loadingMore).toBe(true));
+
+    push("message", { groupId: "g1", msgId: "m4", isOwn: false });
+
+    await waitFor(() =>
+      expect(keys(result.current.messages)).toEqual(["m4", "c1", "m2"]),
+    );
+
+    await act(async () => {
+      releaseOlder(OLDER_PAGE);
+    });
+
+    await waitFor(() => expect(result.current.loadingMore).toBe(false));
+    expect(keys(result.current.messages)).toEqual(["m4", "c1", "m2", "m1"]);
+    expect(result.current.hasMore).toBe(false);
+  });
+
+  it("keeps an own message's delivery status written while 加载更早 is in flight", async () => {
+    let releaseOlder: (page: MessagePage) => void = () => {};
+
+    listMessages.mockResolvedValueOnce(FIRST_PAGE).mockImplementationOnce(
+      () =>
+        new Promise<MessagePage>((resolve) => {
+          releaseOlder = resolve;
+        }),
+    );
+
+    const { result } = setup();
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.loadingMore).toBe(true));
+
+    push("message", {
+      groupId: "g1",
+      msgId: "m3",
+      isOwn: true,
+      clientMsgId: "c1",
+      deliveryStatus: "sent",
+      failCode: null,
+    });
+
+    await act(async () => {
+      releaseOlder(OLDER_PAGE);
+    });
+
+    await waitFor(() => expect(result.current.loadingMore).toBe(false));
+    expect(keys(result.current.messages)).toEqual(["c1", "m2", "m1"]);
+    expect(result.current.messages[0]).toEqual({
+      ...own,
+      msgId: "m3",
+      deliveryStatus: "sent",
+    });
+    // 就地写，不发请求：首页 + 更早一页。
+    expect(listMessages).toHaveBeenCalledTimes(2);
+  });
+
   it("ignores events of other groups", async () => {
     listMessages.mockResolvedValueOnce(FIRST_PAGE);
 
