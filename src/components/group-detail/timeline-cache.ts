@@ -2,6 +2,7 @@
 // 缓存形状是 useInfiniteQuery 的 InfiniteData<MessagePage>：pages[0] 是最新页，每页 items 按 sentAt 倒序。
 // 规则：新项只进 pages[0] 头部（按 sentAt 倒序找位置），pageParams 与旧页一律不动 —— 游标是「比某项更早」，
 // 后来的新项不影响旧游标；更新按 key 在每一页就地替换；全程按 messageKey 去重。
+// 断线补齐：从最新页往前翻，直到拉回的页接上缓存（catchUpAnchor / reachesAnchor），再一次性并进 pages[0]。
 // 这里不碰 React / queryClient，由 use-message-timeline.ts 用 setQueryData 的函数式更新套上。
 
 import type { InfiniteData } from "@tanstack/react-query";
@@ -132,7 +133,71 @@ export function prependOwnMessage(
   return replacePage(data, 0, insertByTime(head.items, message));
 }
 
-/** 全部页拍平（仍是 sentAt 倒序）；view 决定渲染方向。 */
+/**
+ * 断线补齐的接上点。拉回的页只要包含它、或者比它更早，就说明与缓存之间没有空洞。
+ * key 为 null 时只按时间判断。
+ */
+export interface CatchUpAnchor {
+  key: string | null;
+  sentAt: string;
+}
+
+/**
+ * 缓存里最新的一条「位置可信」的消息：没有 clientMsgId 的行。带 clientMsgId 的是自己发的，
+ * 可能是乐观插入（受理时刻由浏览器给），发出后 sentAt 还会变成网关时刻 —— 以它为接上点，
+ * 断线期间排在它前面的消息会被漏掉。全是自己的消息时退到最旧的一条、只按时间判断（多翻几页，不漏）；
+ * 缓存里一条都没有返回 null（调用方一直翻到头）。
+ */
+export function catchUpAnchor(data: TimelineData): CatchUpAnchor | null {
+  let newestStable: MessageRead | null = null;
+  let oldest: MessageRead | null = null;
+
+  for (const item of flattenTimeline(data)) {
+    if (
+      item.clientMsgId === null &&
+      (newestStable === null || item.sentAt > newestStable.sentAt)
+    )
+      newestStable = item;
+
+    if (oldest === null || item.sentAt < oldest.sentAt) oldest = item;
+  }
+
+  if (newestStable)
+    return { key: messageKey(newestStable), sentAt: newestStable.sentAt };
+
+  return oldest ? { key: null, sentAt: oldest.sentAt } : null;
+}
+
+/** 拉回的这一页是否已经接上缓存：含接上点那一行，或有比它更早的行。 */
+export function reachesAnchor(
+  items: MessageRead[],
+  anchor: CatchUpAnchor,
+): boolean {
+  return items.some(
+    (item) =>
+      (anchor.key !== null && messageKey(item) === anchor.key) ||
+      item.sentAt < anchor.sentAt,
+  );
+}
+
+/**
+ * 全部页拍平（仍是 sentAt 倒序）；view 决定渲染方向。按 messageKey 跨页去重、留较新一页的那一行：
+ * 自己消息的 sentAt 从受理时刻变成网关时刻后，同一条可能既在旧页（受理时刻拉到的）又在最新页。
+ */
 export function flattenTimeline(data: TimelineData | undefined): MessageRead[] {
-  return data?.pages.flatMap((page) => page.items) ?? [];
+  const seen = new Set<string>();
+  const out: MessageRead[] = [];
+
+  for (const page of data?.pages ?? []) {
+    for (const item of page.items) {
+      const key = messageKey(item);
+
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      out.push(item);
+    }
+  }
+
+  return out;
 }

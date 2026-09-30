@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyDeliveryUpdate,
+  catchUpAnchor,
   flattenTimeline,
   mergeHeadPage,
   prependOwnMessage,
+  reachesAnchor,
   type TimelineData,
 } from "@/components/group-detail/timeline-cache";
 import type { MessageRead } from "@/services/message-service";
@@ -155,5 +157,70 @@ describe("flattenTimeline", () => {
   it("concatenates pages in order and tolerates undefined", () => {
     expect(flattenTimeline(data)).toEqual([own, m2, m1]);
     expect(flattenTimeline(undefined)).toEqual([]);
+  });
+
+  // 前端 #14：自己消息的 sentAt 从受理时刻变成网关时刻后，同一条可能同时在两页里（渲染两行、React key 重复）
+  it("keeps one row per messageKey across pages, the one on the newer page", () => {
+    const ownAccepted = { ...own, sentAt: "2026-09-30T10:00:30.000Z" };
+    const ownSent = {
+      ...own,
+      msgId: "m3",
+      deliveryStatus: "sent" as const,
+      sentAt: "2026-09-30T10:03:00.000Z",
+    };
+    const twice: TimelineData = {
+      pages: [
+        { items: [ownSent, m2], nextCursor: "cur1" },
+        { items: [m1, ownAccepted], nextCursor: null },
+      ],
+      pageParams: [undefined, "cur1"],
+    };
+
+    expect(flattenTimeline(twice)).toEqual([ownSent, m2, m1]);
+  });
+});
+
+describe("catchUpAnchor / reachesAnchor", () => {
+  it("anchors on the newest cached row that has no clientMsgId", () => {
+    // own（c1）可能是乐观插入的受理时刻，位置不可信，不当接上点
+    expect(catchUpAnchor(data)).toEqual({ key: "m2", sentAt: m2.sentAt });
+  });
+
+  it("falls back to the oldest cached row (time only) when every row carries a clientMsgId", () => {
+    const own2 = msg({
+      clientMsgId: "c2",
+      isOwn: true,
+      sentAt: "2026-09-30T10:04:00.000Z",
+    });
+    const onlyOwn: TimelineData = {
+      pages: [{ items: [own2, own], nextCursor: null }],
+      pageParams: [undefined],
+    };
+
+    expect(catchUpAnchor(onlyOwn)).toEqual({ key: null, sentAt: own.sentAt });
+  });
+
+  it("has no anchor for an empty timeline", () => {
+    expect(
+      catchUpAnchor({
+        pages: [{ items: [], nextCursor: null }],
+        pageParams: [undefined],
+      }),
+    ).toBeNull();
+  });
+
+  it("is reached by the anchor row itself or by any row older than it", () => {
+    const anchor = { key: "m2", sentAt: m2.sentAt };
+    const m9 = msg({ msgId: "m9", sentAt: "2026-09-30T10:09:00.000Z" });
+    const ownLater = { ...own, sentAt: "2026-09-30T10:08:00.000Z" };
+
+    // 只和缓存里的自己消息（c1）重叠不算接上：它的位置可能变过
+    expect(reachesAnchor([m9, ownLater], anchor)).toBe(false);
+    expect(reachesAnchor([m9, m2], anchor)).toBe(true);
+    expect(reachesAnchor([m9, m1], anchor)).toBe(true);
+    expect(reachesAnchor([], anchor)).toBe(false);
+    // 没有 key 的兜底锚点只按时间判断
+    expect(reachesAnchor([m2], { key: null, sentAt: m2.sentAt })).toBe(false);
+    expect(reachesAnchor([m1], { key: null, sentAt: m2.sentAt })).toBe(true);
   });
 });

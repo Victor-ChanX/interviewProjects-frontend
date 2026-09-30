@@ -53,16 +53,26 @@ export function AppTopbarView({ breadcrumbs, connection }: AppTopbarViewProps) {
           ))}
         </BreadcrumbList>
       </Breadcrumb>
-      {connection ? (
-        <StatusBadge
-          tone={connection.tone}
-          pulse={connection.pending}
-          data-testid="connection-status"
-          title="实时连接状态"
-        >
-          {connection.label}
-        </StatusBadge>
-      ) : null}
+      {/* 连接状态变化（实时 → 重连中 → 同步中）由读屏礼貌播报（前端 #14）；live 区域常驻，
+          徽标首次出现也能被播报。 */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="flex shrink-0"
+      >
+        {connection ? (
+          <StatusBadge
+            tone={connection.tone}
+            pulse={connection.pending}
+            data-testid="connection-status"
+            title="实时连接状态"
+          >
+            <span className="sr-only">实时连接状态：</span>
+            {connection.label}
+          </StatusBadge>
+        ) : null}
+      </div>
     </header>
   );
 }

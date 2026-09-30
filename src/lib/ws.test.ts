@@ -325,8 +325,11 @@ describe("reconnect", () => {
     expect(getLastSeq()).toBe(11);
   });
 
-  it("advances lastSeq only after every handler succeeded", () => {
+  // 前端 #14：只是不推进抛错那一帧的 lastSeq 不够 —— 后面的帧照常把水位推过它，重连不会再补发，
+  // 那条事件的效果永久丢失。抛错时按 resync 全量重拉，由 REST 把它的效果带回来。
+  it("forces a full resync when a handler throws, so later frames moving lastSeq past it lose nothing", () => {
     const socket = connectAndAuth();
+    const seen: number[] = [];
     let failOnce = true;
 
     subscribeRealtime((event) => {
@@ -334,22 +337,32 @@ describe("reconnect", () => {
         failOnce = false;
         throw new Error("boom");
       }
+
+      seen.push(event.seq);
     });
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     socket.push({ seq: 1, type: "message", payload: {} });
-    socket.push({ seq: 2, type: "message", payload: {} });
+    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
 
-    // seq 2 的 handler 抛错：水位停在 1，断线后服务端会把 2 再补发一次（handler 幂等）。
-    expect(getLastSeq()).toBe(1);
-    expect(window.sessionStorage.getItem(LAST_SEQ_STORAGE_KEY)).toBe("1");
+    socket.push({ seq: 2, type: "message", payload: {} });
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith();
+
+    socket.push({ seq: 3, type: "message", payload: {} });
+
+    expect(seen).toEqual([1, 3]);
+    // 全量重拉已经兜住 seq 2：水位照常推进，重连从 3 起要补发，不再重复触发重拉。
+    expect(getLastSeq()).toBe(3);
+    expect(window.sessionStorage.getItem(LAST_SEQ_STORAGE_KEY)).toBe("3");
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
 
     socket.drop();
     vi.advanceTimersByTime(100);
     lastSocket().open();
 
     expect(lastSocket().frames()).toEqual([
-      { type: "auth", accessToken: "tok", sinceSeq: 1 },
+      { type: "auth", accessToken: "tok", sinceSeq: 3 },
     ]);
   });
 

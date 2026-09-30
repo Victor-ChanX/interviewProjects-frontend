@@ -2,6 +2,7 @@
 // （聊天习惯），「加载更早」在最上面。滚动容器用 flex-col-reverse：初始就停在底部、新消息进来不跳，
 // 加载更早的页接在顶部也不把视口推走 —— 不需要任何 effect 去算滚动位置。
 // 自己的消息靠右（主色气泡）并带投递状态；别人的靠左。不知道有实时连接这回事，新消息进来只是 props 变了。
+// 滚动容器是 role="log" + aria-live="polite"：读屏在用户空闲时播报新进来的消息（前端 #14）。
 
 import { MessagesSquare } from "lucide-react";
 
@@ -135,6 +136,9 @@ export function MessageTimelineView({
 
   return (
     <div
+      role="log"
+      aria-live="polite"
+      aria-label="群消息"
       className="flex h-[min(60dvh,36rem)] flex-col-reverse overflow-y-auto bg-muted/20"
       data-testid="message-timeline"
     >

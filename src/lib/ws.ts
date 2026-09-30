@@ -8,8 +8,9 @@
 //   不带 sinceSeq（lastSeq 为 0）时服务端从「现在」起推，之前的状态由 REST 拉。
 //   补发帧与实时帧走同一条 dispatch → 订阅者路径（题目 B4：断线期间的事件重连后出现且不重复），
 //   所以每个订阅者的 handler 必须幂等：同一事件重放只能得到同一份缓存。
-//   lastSeq 只在所有 handler 都处理成功后推进：先推进再处理的话，handler 抛错的那一帧就永久漏掉；
-//   不推进则下次重连服务端还会补发它（幂等 handler 重放无害）。
+//   handler 抛错的那一帧不能指望补发：只是不推进它的 lastSeq 没用，后面的帧照常把水位推过它，
+//   重连时 sinceSeq 已在它之后（前端 #14）。所以抛错时按 resync 兜底 —— 全量 invalidateQueries，
+//   由 REST 把这一帧的效果带回来 —— 然后照常推进 lastSeq。
 // - `{ type: "resync", sinceSeq, fromSeq }`：补发窗口已过、(sinceSeq, fromSeq] 之间有缺口 →
 //   全量 invalidateQueries，并把 lastSeq 推到 fromSeq（服务端从那里起推；不推进的话下一次
 //   重连又带着旧 sinceSeq 去要，每次都 resync、每次都全量重拉）。
@@ -426,9 +427,11 @@ function dispatch(event: RealtimeEvent): void {
     }
   }
 
-  // 只在全部 handler 成功后推进：抛错的那一帧不算「已处理」，下次重连服务端还会补发它
-  //（后面的帧照常推进 lastSeq，所以它最多被多补发一次；handler 幂等即无害）。
-  if (!failed) advanceSeq(event.seq);
+  // 有 handler 抛错：这一帧的效果没进缓存，也等不到补发 —— 下一帧就会把 lastSeq 推过它，
+  // 重连时服务端从更后面补起。按 resync 全量重拉兜底，REST 返回的是包含这一帧效果的现状。
+  if (failed) config.onResync();
+
+  advanceSeq(event.seq);
 }
 
 function handleControl(
