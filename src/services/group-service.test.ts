@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), post: vi.fn() }));
+const api = vi.hoisted(() => ({
+  get: vi.fn(),
+  patch: vi.fn(),
+  post: vi.fn(),
+  delete: vi.fn(),
+}));
 
 vi.mock("@/lib/api", () => ({ api }));
 
 import {
   createGroup,
+  deleteGroup,
   getGroup,
   groupUrl,
   leaveAllGroup,
@@ -85,5 +91,21 @@ describe("leaveAllGroup", () => {
 
     await expect(leaveAllGroup("g/1")).resolves.toEqual({ jobId: "j2" });
     expect(api.post).toHaveBeenCalledWith("/api/groups/g%2F1/leave-all");
+  });
+});
+
+describe("deleteGroup", () => {
+  it("DELETEs the group path and returns the counts", async () => {
+    const body = {
+      id: "g1",
+      messagesDeleted: 3,
+      agentRunsDeleted: 1,
+      sequenceRunsDeleted: 0,
+    };
+
+    api.delete.mockResolvedValue(body);
+
+    await expect(deleteGroup("g/1")).resolves.toEqual(body);
+    expect(api.delete).toHaveBeenCalledWith("/api/groups/g%2F1");
   });
 });

@@ -29,6 +29,8 @@ export type CreateGroupResponse = components["schemas"]["CreateGroupResponse"];
 
 export type LeaveAllResponse = components["schemas"]["LeaveAllResponse"];
 
+export type DeleteGroupResponse = components["schemas"]["DeleteGroupResponse"];
+
 const GROUPS_URL = "/api/groups";
 
 export function groupUrl(id: string): string {
@@ -60,4 +62,9 @@ export function createGroup(
 /** 群里所有服务账号退群（非群主先、群主最后；异步 job）：202 { jobId }。 */
 export function leaveAllGroup(id: string): Promise<LeaveAllResponse> {
   return api.post<LeaveAllResponse>(`${groupUrl(id)}/leave-all`);
+}
+
+/** 删除已退出（left）的群及其消息与运行记录（后端 #62，题目之外的补充）：不可恢复。 */
+export function deleteGroup(id: string): Promise<DeleteGroupResponse> {
+  return api.delete<DeleteGroupResponse>(groupUrl(id));
 }

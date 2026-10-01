@@ -100,6 +100,15 @@ export interface SimulateInboundDialogViewProps {
   onClearImage: () => void;
 }
 
+/** 删除已退出的群（前端 #25）：admin 才有。 */
+export interface DeleteGroupDialogViewProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  groupLabel: string;
+  deleting: boolean;
+  onConfirm: () => void;
+}
+
 export interface GroupDetailViewProps {
   group: GroupRead | undefined;
   loading: boolean;
@@ -124,4 +133,7 @@ export interface GroupDetailViewProps {
   /** 演示用「模拟外部发言」：admin 且后端开关打开时才有；按钮只在群 active 时显示。 */
   simulateInbound: SimulateInboundDialogViewProps | null;
   onSimulateInbound: () => void;
+  /** admin 才有「删除群」；按钮只在群已退出（left）时显示。 */
+  deleteGroup: DeleteGroupDialogViewProps | null;
+  onDeleteGroup: () => void;
 }

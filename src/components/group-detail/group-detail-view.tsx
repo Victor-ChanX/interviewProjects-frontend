@@ -2,7 +2,7 @@
 // + 页签（消息时间线与发送框 / 成员 / Agent 运行 / 序列）。页签面板 keepMounted：切走再切回来，
 // 发送框里没发出去的字不丢（frontend-component-splitting「页签面板里有表单时用 hidden」）。
 
-import { CalendarClock, LogOut, MessageSquarePlus } from "lucide-react";
+import { CalendarClock, LogOut, MessageSquarePlus, Trash2 } from "lucide-react";
 import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { groupDisplayName, shortId } from "@/lib/short-id";
 import type { GroupStatus } from "@/services/group-service";
 
 import { AgentRunListView } from "./agent-run-list-view";
+import { DeleteGroupDialogView } from "./delete-group-dialog-view";
 import { GroupInfoCardView } from "./group-info-card-view";
 import { GroupSequenceTabView } from "./group-sequence-tab-view";
 import { GROUP_TAB_LABELS, GROUP_TABS, type GroupTab } from "./group-tabs";
@@ -54,6 +55,8 @@ export function GroupDetailView({
   onLeaveAll,
   simulateInbound,
   onSimulateInbound,
+  deleteGroup,
+  onDeleteGroup,
 }: GroupDetailViewProps) {
   if (error)
     return (
@@ -120,11 +123,18 @@ export function GroupDetailView({
                 全部退群
               </Button>
             ) : null}
+            {deleteGroup && group.status === "left" ? (
+              <Button variant="destructive" onClick={onDeleteGroup}>
+                <Trash2 />
+                删除群
+              </Button>
+            ) : null}
           </>
         }
       />
 
       {leaveAll ? <LeaveAllDialogView {...leaveAll} /> : null}
+      {deleteGroup ? <DeleteGroupDialogView {...deleteGroup} /> : null}
       {simulateInbound ? (
         <SimulateInboundDialogView {...simulateInbound} />
       ) : null}

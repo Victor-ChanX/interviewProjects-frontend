@@ -16,11 +16,13 @@ import { GroupDetailView } from "./group-detail-view";
 import type { GroupTab } from "./group-tabs";
 import type {
   GroupSetting,
+  DeleteGroupDialogViewProps,
   LeaveAllDialogViewProps,
   SendMessageFormViewProps,
   SimulateInboundDialogViewProps,
 } from "./types";
 import { useAgentRuns } from "./use-agent-runs";
+import { useDeleteGroup } from "./use-delete-group";
 import { useGroupDetail } from "./use-group-detail";
 import { useGroupTab } from "./use-group-tab";
 import { useLeaveAll } from "./use-leave-all";
@@ -55,6 +57,7 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
   const send = useSendMessage({ groupId, members, enabled: canWrite });
   const leave = useLeaveAll(groupId);
   const simulate = useSimulateInbound({ groupId, enabled: canWrite });
+  const removal = useDeleteGroup(groupId);
   const { toggleSetting, refetch: refetchDetail } = detail;
   const { refetch: refetchTimeline } = timeline;
   const { refetch: refetchAgentRuns } = agentRuns;
@@ -153,6 +156,25 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
   );
   const { setOpen: setSimulateOpen } = simulate;
 
+  const deleteGroupDialog = useMemo<DeleteGroupDialogViewProps | null>(
+    () =>
+      canWrite
+        ? {
+            open: removal.open,
+            onOpenChange: removal.setOpen,
+            groupLabel: detail.group?.gatewayGroupId ?? groupId,
+            deleting: removal.deleting,
+            onConfirm: () => void removal.confirm(),
+          }
+        : null,
+    [canWrite, detail.group?.gatewayGroupId, groupId, removal],
+  );
+  const { setOpen: setDeleteOpen } = removal;
+
+  const onDeleteGroup = useCallback(() => {
+    setDeleteOpen(true);
+  }, [setDeleteOpen]);
+
   const onSimulateInbound = useCallback(() => {
     setSimulateOpen(true);
   }, [setSimulateOpen]);
@@ -195,6 +217,8 @@ export function GroupDetailContainer({ groupId }: { groupId: string }) {
       onLeaveAll={leave.openDialog}
       simulateInbound={simulateInbound}
       onSimulateInbound={onSimulateInbound}
+      deleteGroup={deleteGroupDialog}
+      onDeleteGroup={onDeleteGroup}
     />
   );
 }
