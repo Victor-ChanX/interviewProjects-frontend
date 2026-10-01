@@ -4,6 +4,7 @@ import {
   applyDeliveryUpdate,
   catchUpAnchor,
   flattenTimeline,
+  isInLoadedHistory,
   mergeHeadPage,
   prependOwnMessage,
   reachesAnchor,
@@ -365,5 +366,41 @@ describe("catchUpAnchor / reachesAnchor", () => {
     // 没有 key 的兜底锚点只按时间判断
     expect(reachesAnchor([m2], { key: null, sentAt: m2.sentAt })).toBe(false);
     expect(reachesAnchor([m1], { key: null, sentAt: m2.sentAt })).toBe(true);
+  });
+});
+
+describe("isInLoadedHistory", () => {
+  // data 的接上点是 m2（10:02，最新的「位置可信」行）；最旧已加载 m1（10:01），最后一页已翻到头
+  it("is true for a message older than the catch-up anchor but within the loaded range", () => {
+    expect(isInLoadedHistory(data, "2026-09-30T10:01:30.000Z")).toBe(true);
+  });
+
+  it("is false at or after the anchor: the head-page refresh reaches it", () => {
+    expect(isInLoadedHistory(data, "2026-09-30T10:02:00.000Z")).toBe(false);
+    expect(isInLoadedHistory(data, "2026-09-30T10:05:00.000Z")).toBe(false);
+  });
+
+  it("covers anything older once the whole history is loaded, nothing older while more pages remain", () => {
+    expect(isInLoadedHistory(data, "2026-09-30T09:00:00.000Z")).toBe(true);
+
+    const partial: TimelineData = {
+      pages: [
+        { items: [own, m2], nextCursor: "cur1" },
+        { items: [m1], nextCursor: "cur2" },
+      ],
+      pageParams: [undefined, "cur1"],
+    };
+
+    expect(isInLoadedHistory(partial, "2026-09-30T09:00:00.000Z")).toBe(false);
+    expect(isInLoadedHistory(partial, "2026-09-30T10:01:00.000Z")).toBe(true);
+  });
+
+  it("is false for an empty cache (no anchor)", () => {
+    expect(
+      isInLoadedHistory(
+        { pages: [{ items: [], nextCursor: null }], pageParams: [undefined] },
+        "2026-09-30T10:00:00.000Z",
+      ),
+    ).toBe(false);
   });
 });

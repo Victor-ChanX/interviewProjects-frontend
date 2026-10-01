@@ -225,6 +225,25 @@ export function catchUpAnchor(data: TimelineData): CatchUpAnchor | null {
   return oldest ? { key: null, sentAt: oldest.sentAt } : null;
 }
 
+/**
+ * 事件指向的消息是否落在「已加载、但最新页补拉够不着」的那段历史里（前端 #23）：比补拉的接上点还早（补拉翻到
+ * 接上点就停），又不早于缓存里最旧的一条（或者已经翻到头）。补投的旧消息（题目 2.1：sentAt 可以早任意时长）、
+ * 旧消息的附件状态变化（后端 #59）都属于这种 —— 只补拉最新页看不到它们，要整份重拉。比已加载的还旧、又还没翻到头的
+ * 不管：用户点「加载更早」时自然会拉到。
+ */
+export function isInLoadedHistory(data: TimelineData, sentAt: string): boolean {
+  const anchor = catchUpAnchor(data);
+
+  if (!anchor || sentAt >= anchor.sentAt) return false;
+
+  if (data.pages.at(-1)?.nextCursor === null) return true;
+
+  const items = flattenTimeline(data);
+  const oldest = items.at(-1);
+
+  return oldest !== undefined && sentAt >= oldest.sentAt;
+}
+
 /** 拉回的这一页是否已经接上缓存：含接上点那一行，或有比它更早的行。 */
 export function reachesAnchor(
   items: MessageRead[],

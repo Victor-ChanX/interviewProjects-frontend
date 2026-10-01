@@ -417,7 +417,7 @@ describe("reconnect", () => {
   it("adopts the seq carried by the auth frame as the resume point", () => {
     connectRealtime();
     lastSocket().open();
-    // 服务端在 auth 成功帧里报当前 seq（前向兼容）：不是事件帧，不派发；作为补发点采用。
+    // 服务端在 auth 成功帧里报推送起点 seq（后端 #60）：不是事件帧，不派发；作为补发点采用。
     const seen: number[] = [];
 
     subscribeRealtime((event) => seen.push(event.seq));

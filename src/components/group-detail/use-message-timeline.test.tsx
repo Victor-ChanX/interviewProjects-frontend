@@ -170,6 +170,45 @@ describe("useMessageTimeline", () => {
     expect(result.current.hasMore).toBe(false);
   });
 
+  // 前端 #23：补投的旧消息 sentAt 可以早任意时长，落在已加载的旧页里 —— 只补拉最新页看不到它
+  it("refetches the whole timeline when a late message falls inside already-loaded history", async () => {
+    const late = msg({ msgId: "m-late", sentAt: "2026-09-30T10:01:30.000Z" });
+
+    listMessages
+      .mockResolvedValueOnce(FIRST_PAGE)
+      .mockResolvedValueOnce(OLDER_PAGE)
+      // 整份重拉：两页都重新拉，旧页里多了补投的那条
+      .mockResolvedValueOnce(FIRST_PAGE)
+      .mockResolvedValueOnce({ items: [late, m1], nextCursor: null });
+
+    const { result } = setup();
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.messages).toHaveLength(3));
+
+    push("message", {
+      groupId: "g1",
+      msgId: "m-late",
+      isOwn: false,
+      sentAt: late.sentAt,
+    });
+
+    await waitFor(() =>
+      expect(keys(result.current.messages)).toEqual([
+        "c1",
+        "m2",
+        "m-late",
+        "m1",
+      ]),
+    );
+    expect(listMessages).toHaveBeenCalledTimes(4);
+    expect(listMessages).toHaveBeenLastCalledWith("g1", {
+      before: "cur1",
+      limit: 50,
+    });
+  });
+
   // 前端 #14：断线期间新消息超过一页时，只拉最新一页会在中间留下永久空洞
   it("keeps paging older on catch-up until the fetched pages reach the cached messages", async () => {
     const newer = Array.from({ length: 6 }, (_, i) =>

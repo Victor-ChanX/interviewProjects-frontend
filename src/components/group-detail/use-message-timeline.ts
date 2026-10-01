@@ -42,6 +42,7 @@ import {
   catchUpAnchor,
   type CatchUpAnchor,
   flattenTimeline,
+  isInLoadedHistory,
   mergeHeadPage,
   reachesAnchor,
   type TimelineData,
@@ -226,6 +227,13 @@ export function useMessageTimeline(groupId: string) {
 
         // 在途的补拉拿的是这次更新之前的快照：回来后再拉一轮（前端 #17）。
         if (state.inFlight) state.again = true;
+
+        return;
+      }
+
+      // 落在已加载的旧区间里（补投的旧消息 / 旧消息的附件变了）：最新页补拉够不着，整份重拉（前端 #23）
+      if (payload.sentAt && isInLoadedHistory(current, payload.sentAt)) {
+        invalidateTimeline(queryClient, groupId);
 
         return;
       }

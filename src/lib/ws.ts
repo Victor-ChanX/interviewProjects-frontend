@@ -18,8 +18,8 @@
 //   sinceSeq，服务端只会从「现在」起推，断线期间的事件谁也补不回来 —— 这时按 resync 处理，
 //   全量重拉一次让 REST 把断线期间的变化带回来（2026-09-30 真机复现：开着群详情 kill 后端、
 //   curl 发两条再拉起，徽标回到「实时」但消息不出现，原因就是这个）。
-//   服务端若在 auth 成功帧里带当前 `seq`（`{ type: "auth", success: true, seq }`），这里直接把它当
-//   补发点采用，之后的重连就能真正补发而不用全量重拉；后端还没带时这条路径自动不生效。
+//   服务端在 auth 成功帧里带上本连接的推送起点 `seq`（`{ type: "auth", success: true, seq }`，后端 #60），
+//   这里直接把它当补发点采用：之后的重连就能真正补发，上面的全量重拉只剩 seq 缺失时兜底。
 // - 心跳：每 heartbeatMs 发 `{ type: "ping" }`，服务端回 `{ type: "pong" }`；一个周期内
 //   没收到任何帧就主动 close() 触发重连（半开连接浏览器不会自己报 close）。
 // - 重连：指数退避（500ms 起、上限 30s、带抖动 —— 首次 ≤ 600ms，给 B4「3 秒内」留足余量），
@@ -32,7 +32,8 @@
 //   重连成功、服务端正在补发 —— 补发没有结束帧，事件帧安静 syncSettleMs 后才算 open。
 // - 可注入 WebSocket 构造器与时钟：测试用假 socket 推帧，断言发出的帧与缓存变化。
 //
-// 事件 seq 跳号不当作丢帧：ws_events.seq 是 PG 序列，事务回滚会留下合法的空号。
+// 事件 seq 由后端在事务提交后连续编号（ws-events.assignWsSeqs），正常不跳号；补发窗口外的缺口由服务端的
+// resync 帧告知（见上），这里不自己按跳号判断丢帧。
 
 import { getAccessToken } from "@/lib/auth";
 import { queryClient } from "@/lib/query-client";
@@ -374,7 +375,7 @@ function parseFrame(data: unknown): Frame {
 
   if (typeof type !== "string") return null;
 
-  // 控制帧先于事件帧判断：auth 成功帧将来可能带当前 seq，不能因此被当成事件。
+  // 控制帧先于事件帧判断：auth 成功帧带着 seq（补发点），不能因此被当成事件。
   if (type === "auth")
     return {
       kind: "control",
