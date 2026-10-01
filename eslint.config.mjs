@@ -746,11 +746,7 @@ const eslintConfig = defineConfig([
 
   // 构建产物、覆盖率、生成物与 agent 配置不 lint（node_modules 是 eslint 默认忽略）。
   // src/types/api.generated.ts 是 openapi-typescript 的输出：整个跳过，与 .prettierignore 同口径。
-  globalIgnores([
-    "dist/**",
-    "coverage/**",
-    "src/types/api.generated.ts",
-  ]),
+  globalIgnores(["dist/**", "coverage/**", "src/types/api.generated.ts"]),
 ]);
 
 export default eslintConfig;
