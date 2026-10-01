@@ -33,7 +33,33 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        /** 新增一个服务账号（idle，之后 connect）；题目里账号由 seed 预置，这是控制台的补充入口 */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        id: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccountRead"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -489,7 +515,29 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        delete?: never;
+        /** 删除已退出（left）的群及其消息、运行记录（题目之外的控制台补充；不可恢复） */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DeleteGroupResponse"];
+                    };
+                };
+            };
+        };
         options?: never;
         head?: never;
         /** 改群开关 agentEnabled / autoKickEnabled */
@@ -1673,6 +1721,18 @@ export interface components {
             messages: components["schemas"]["DashboardMessagesInput"];
             sequenceRuns: components["schemas"]["DashboardSequenceRunsInput"];
             timeZone: string;
+        };
+        DeleteGroupResponse: {
+            agentRunsDeleted: number;
+            id: string;
+            messagesDeleted: number;
+            sequenceRunsDeleted: number;
+        };
+        DeleteGroupResponseInput: {
+            agentRunsDeleted: number;
+            id: string;
+            messagesDeleted: number;
+            sequenceRunsDeleted: number;
         };
         /** @enum {string} */
         DeliveryStatus: "queued" | "accepted" | "sent" | "failed" | "unknown" | "cancelled";
