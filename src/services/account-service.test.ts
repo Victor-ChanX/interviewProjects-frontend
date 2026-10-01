@@ -4,6 +4,7 @@ import { RequestError } from "@/lib/request";
 import {
   accountErrorCode,
   connectAccount,
+  createAccount,
   listAccounts,
   transitionAccount,
   type AccountRead,
@@ -94,5 +95,25 @@ describe("accountErrorCode", () => {
     expect(accountErrorCode(new RequestError(500, "boom"))).toBeNull();
     expect(accountErrorCode(new TypeError("fetch failed"))).toBeNull();
     expect(accountErrorCode("CAS_CONFLICT")).toBeNull();
+  });
+});
+
+describe("createAccount", () => {
+  it("POSTs { id } to /api/accounts and returns the new account", async () => {
+    apiPost.mockResolvedValue({ ...ACCOUNT, id: "acc-9", status: "idle" });
+
+    await expect(createAccount("acc-9")).resolves.toMatchObject({
+      id: "acc-9",
+      status: "idle",
+    });
+    expect(apiPost).toHaveBeenCalledWith("/api/accounts", { id: "acc-9" });
+  });
+
+  it("exposes ACCOUNT_EXISTS as a known error code", () => {
+    expect(
+      accountErrorCode(
+        new RequestError(409, "账号已存在", undefined, "ACCOUNT_EXISTS"),
+      ),
+    ).toBe("ACCOUNT_EXISTS");
   });
 });

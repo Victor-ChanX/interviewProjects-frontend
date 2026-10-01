@@ -1,8 +1,22 @@
+import type { FormEvent } from "react";
+import type { FieldErrors, UseFormRegister } from "react-hook-form";
+
 import type { FilterTabOption } from "@/components/ui-atoms/filter-tabs";
 import type { AccountAction } from "@/lib/account-transitions";
 import type { AccountStatus } from "@/services/account-service";
 
 import type { AccountTab } from "./account-filters";
+import type { CreateAccountFormValues } from "./create-account-schema";
+
+/** 「新增账号」弹窗（前端 #26）：admin 才有。 */
+export interface CreateAccountDialogViewProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  register: UseFormRegister<CreateAccountFormValues>;
+  errors: FieldErrors<CreateAccountFormValues>;
+  submitting: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}
 
 /** 题目第 4 节页面 2 的三个按钮文案（hook 的 toast 与 view 的按钮共用）。 */
 export const ACCOUNT_ACTION_LABELS: Readonly<Record<AccountAction, string>> = {
@@ -39,4 +53,7 @@ export interface AccountListViewProps {
   pendingId: string | null;
   onAction: (id: string, action: AccountAction) => void;
   onRetry: () => void;
+  /** admin 才有「新增账号」；viewer 为 null。 */
+  createDialog: CreateAccountDialogViewProps | null;
+  onCreate: () => void;
 }

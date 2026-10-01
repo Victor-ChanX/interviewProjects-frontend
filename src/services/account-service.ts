@@ -25,6 +25,7 @@ export const ACCOUNT_ERROR_CODES = [
   "CAS_CONFLICT",
   "ACCOUNT_UNAVAILABLE",
   "ACCOUNT_NOT_FOUND",
+  "ACCOUNT_EXISTS",
   "GATEWAY_ERROR",
 ] as const;
 
@@ -34,6 +35,11 @@ const ACCOUNTS_URL = "/api/accounts";
 
 function accountUrl(id: string, suffix: string): string {
   return `${ACCOUNTS_URL}/${encodeURIComponent(id)}/${suffix}`;
+}
+
+/** 新增一个服务账号（后端 #63，题目之外的控制台补充）：201 idle 账号；id 重复 409 ACCOUNT_EXISTS。 */
+export function createAccount(id: string): Promise<AccountRead> {
+  return api.post<AccountRead>(ACCOUNTS_URL, { id });
 }
 
 export function listAccounts(): Promise<AccountRead[]> {

@@ -1,7 +1,7 @@
 // view：账号管理。标题行 + 状态筛选页签 + DataTable（账号 / 状态 / 平台用户 ID / 限流到期 / 操作）。
 // 纯展示：不 fetch、不 toast、不做路由、不碰 storage、不知道有实时连接。操作按钮已按转移表 + 权限算好。
 
-import { RefreshCw, UserRound } from "lucide-react";
+import { Plus, RefreshCw, UserRound } from "lucide-react";
 import { useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import type { AccountAction } from "@/lib/account-transitions";
 import { getErrorMessage } from "@/lib/get-error-message";
 import { cn } from "@/lib/utils";
 
+import { CreateAccountDialogView } from "./create-account-dialog-view";
 import {
   ACCOUNT_ACTION_LABELS,
   type AccountListViewProps,
@@ -130,6 +131,8 @@ export function AccountListView({
   pendingId,
   onAction,
   onRetry,
+  createDialog,
+  onCreate,
 }: AccountListViewProps) {
   const columns = useMemo(
     () => buildColumns(pendingId, onAction),
@@ -142,12 +145,22 @@ export function AccountListView({
         title="账号管理"
         description={`托管的服务账号及其与消息网关的连接状态（共 ${total} 个）；操作按钮只显示当前状态下合法的转移。`}
         actions={
-          <Button variant="outline" onClick={onRetry} disabled={retrying}>
-            <RefreshCw className={cn({ "animate-spin": retrying })} />
-            刷新
-          </Button>
+          <>
+            <Button variant="outline" onClick={onRetry} disabled={retrying}>
+              <RefreshCw className={cn({ "animate-spin": retrying })} />
+              刷新
+            </Button>
+            {createDialog ? (
+              <Button onClick={onCreate}>
+                <Plus />
+                新增账号
+              </Button>
+            ) : null}
+          </>
         }
       />
+
+      {createDialog ? <CreateAccountDialogView {...createDialog} /> : null}
 
       {error ? (
         <QueryError
